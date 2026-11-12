@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#16321f">
+<title>橡皮艇漂流 · 第一关</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #16321f; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center;
+         font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+         -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  #wrap { position: relative; box-shadow: 0 0 40px rgba(0,0,0,.5); }
+  canvas { display: block; }
+  #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+             background: rgba(10, 40, 60, .5); color: #fff; text-align: center; }
+  #overlay.hidden { display: none; }
+  #panel { width: 80%; max-width: 340px; padding: 22px 20px 20px; border-radius: 18px;
+           background: rgba(18, 60, 84, .93); border: 2px solid rgba(255,255,255,.25);
+           animation: rise .3s ease-out; }
+  @keyframes rise { from { transform: translateY(18px) scale(.96); opacity: 0; } }
+  @keyframes pop { 0% { transform: scale(0) rotate(-40deg); } 70% { transform: scale(1.35) rotate(8deg); } 100% { transform: none; } }
+  #panel h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: 2px; }
+  #panel h2 { margin: 0 0 12px; font-size: 15px; font-weight: 500; color: #9fd8ef; }
+  #panel p { margin: 6px 0; font-size: 14px; line-height: 1.6; color: #e4f4fa; }
+  #panel .stars { font-size: 46px; letter-spacing: 6px; margin: 2px 0 6px; }
+  #panel .stars span { display: inline-block; }
+  #panel .stars .on { color: #ffd23f; text-shadow: 0 2px 0 #b8860b; animation: pop .45s backwards; animation-delay: calc(var(--i) * .32s + .25s); }
+  #panel .stars .off { color: rgba(255,255,255,.2); }
+  #panel .score { font-size: 34px; font-weight: 800; color: #ffe066; margin: 0; line-height: 1.2; }
+  #panel .stats { display: flex; justify-content: space-around; margin: 8px 0 6px; }
+  #panel .stats div { font-size: 12px; color: #9fd8ef; }
+  #panel .stats b { display: block; font-size: 19px; color: #fff; }
+  #panel .goals { text-align: left; display: inline-block; font-size: 13px; line-height: 1.75; color: #cfeaf5; }
+  #panel .goals .ok { color: #8ce99a; } #panel .goals .no { color: #ffa8a8; }
+  #panel kbd { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 5px;
+               background: #fff; color: #134; font: 600 13px/1.5 inherit; }
+  #panel .small { font-size: 12px; color: #9fd8ef; }
+  #panel .new { color: #ffe066; font-weight: 700; }
+  button { margin-top: 14px; padding: 12px 34px; font: 600 18px/1 inherit; color: #5a2d00; cursor: pointer;
+           background: linear-gradient(#ffd23f, #ff9f1c); border: 0; border-radius: 999px;
+           box-shadow: 0 4px 0 #b8600b; }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8600b; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="overlay"><div id="panel"></div></div>
+</div>
+<script>
+(() => {
+'use strict';
+
+// ---------- 基础 ----------
+const W = 480;                 // 逻辑宽度
+let H = 800;                   // 逻辑高度（随屏幕比例变化）
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('wrap');
+const overlay = document.getElementById('overlay');
+const panel = document.getElementById('panel');
+const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const FONT = '-apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+const TAU = Math.PI * 2;
+
+function resize() {
+  const ww = window.innerWidth, wh = window.innerHeight;
+  H = Math.max(640, Math.min(1100, Math.round(W * wh / ww)));
+  const scale = Math.min(ww / W, wh / H);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  wrap.style.width = canvas.style.width = W * scale + 'px';
+  wrap.style.height = canvas.style.height = H * scale + 'px';
+  canvas.width = Math.round(W * scale * dpr);
+  canvas.height = Math.round(H * scale * dpr);
+  ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function hash(i, salt) {            // 稳定的装饰用伪随机 0..1
+  let x = Math.imul(i | 0, 374761393) + Math.imul(salt | 0, 668265263);
+  x = Math.imul(x ^ x >>> 13, 1274126177); return ((x ^ x >>> 16) >>> 0) / 4294967296;
+}
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const store = {
+  get(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? def : v; } catch (e) { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+
+// ---------- 第一关：河道 ----------
+// 坐标：x 横向，d 为顺流距离（屏幕向上）。
+const END = 9000;
+const RAFT_R = 14;
+const BASE_FLOW = 85;
+const PAR_TIME = 60;
+
+const amp = d => 60 * smooth(200, 900, d);
+const riverCx = d => W / 2 + amp(d) * (Math.sin(d / 610) * 0.7 + Math.sin(d / 233 + 2) * 0.3);
+const riverW = d => 118 + 14 * Math.sin(d / 400) - 14 * smooth(3000, 3600, d) * (1 - smooth(4600, 5200, d));
+const riverSlope = d => (riverCx(d + 4) - riverCx(d - 4)) / 8;
+// 安全航线：星星沿此摆放，礁石避开它，保证关卡可通过
+const safeX = d => riverCx(d) + riverW(d) * 0.55 * Math.sin(d / 520 + 1) * smooth(300, 1000, d);
+
+const BOOSTS = [[3300, 3900], [5900, 6400], [7700, 8500]];
+const boostAt = d => { for (const [a, b] of BOOSTS) if (d > a && d < b) return Math.min(1, (d - a) / 80, (b - d) / 80); return 0; };
+const BRIDGES = [2695, 6595];
+const LOG_D = [5250, 5650, 6700, 7300];
+const RING_D = [4570, 7450];
+const DUCK_D = [[620, -1], [2130, 1], [4230, -1], [5460, 1], [8640, -1]];
+
+const SIGNS = [
+  [120, isTouch ? '按住屏幕左侧 / 右侧  划桨转向' : '←  →  划桨转向'],
+  [470, isTouch ? '两侧同时按住  全力前进' : '同时按 ← →（或 ↑）全力前进'],
+  [820, '沿着星星走，避开礁石！'],
+  [3180, '前方急流！'],
+  [4420, '救生圈可以补气'],
+  [5080, '小心漂木，看准时机！'],
+  [7560, '最后冲刺！'],
+];
+
+let rocks, logs, coins, rings, ducks;
+function buildLevel() {
+  const rnd = mulberry32(20261112);
+  rocks = []; logs = []; coins = []; rings = []; ducks = [];
+  for (const ld of LOG_D) logs.push({ d: ld, ph: rnd() * TAU, sp: 0.7 + rnd() * 0.4, x: 0, len: 26, lock: false });
+  for (const rd of RING_D) rings.push({ d: rd, x: riverCx(rd) - (safeX(rd) - riverCx(rd)) * 0.85, got: false });
+  let d = 1000;
+  while (d < 8750) {
+    const diff = smooth(1000, 7000, d), inBoost = boostAt(d) > 0, r = 13 + rnd() * 10;
+    for (let k = 0; k < 10; k++) {
+      const w = riverW(d), x = riverCx(d) + (rnd() * 2 - 1) * (w - r - 4);
+      if (Math.abs(x - safeX(d)) > r + 50) { rocks.push({ x, d, r }); break; }
+    }
+    d += (inBoost ? 190 : 210 - 95 * diff) * (0.7 + rnd() * 0.6);
+  }
+  // 漂木、桥、救生圈附近不放礁石
+  rocks = rocks.filter(r => !logs.some(l => Math.abs(l.d - r.d) < 70) && !BRIDGES.some(b => Math.abs(b - r.d) < 30 + r.r)
+    && !rings.some(g => Math.hypot(g.x - r.x, g.d - r.d) < r.r + 46));
+  rocks.forEach((r, i) => { r.seed = i; r.lock = false; r.min = 1e9; r.passed = false; r.hit = false; });
+  for (let cd = 220; cd <= 8840; cd += 150) coins.push({ x: safeX(cd), d: cd, got: false });
+  for (const [dd, s] of DUCK_D) for (let k = 0; k < 3; k++) {
+    const d2 = dd + k * 26 - 20, n = s * (0.62 + rnd() * 0.22);
+    ducks.push({ d: d2, n, x: riverCx(d2) + n * riverW(d2), ph: rnd() * TAU, s, fly: 0, brown: rnd() < 0.4 });
+  }
+}
+
+// ---------- 状态 ----------
+let state = 'menu';            // menu | ready | play | pause | win | dead
+let T = 0, LT = 0;             // 动画时钟 / 关卡时钟
+let raft, cam, particles, wake, floaters, confetti, shake, flash, countdown, nextCoin;
+let muted = store.get('raft_muted', false);
+const input = { L: false, R: false, U: false, B: false };
+
+function placeLogs() { for (const l of logs) l.x = riverCx(l.d) + (riverW(l.d) - l.len - 14) * Math.sin(LT * l.sp + l.ph); }
+function reset() {
+  buildLevel();
+  raft = { x: W / 2, d: -90, vx: 0, vd: 0, a: 0, av: 0, hp: 3, inv: 0, coins: 0, time: 0, score: 0, combo: 0, bestCombo: 0,
+           stroke: 0, strokeL: 0, strokeR: 0, hits: 0, sink: 0, squash: 0, near: 0 };
+  cam = { d: raft.d };
+  particles = []; wake = []; floaters = []; confetti = []; shake = 0; flash = 0; LT = 0; nextCoin = 0; countdown = 0;
+  placeLogs();
+}
+
+// ---------- 声音 ----------
+let ac = null, master = null, ambGain = null, noiseBuf = null;
+function audio() {
+  if (!ac) {
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const ch = noiseBuf.getChannelData(0); let last = 0;
+      for (let i = 0; i < ch.length; i++) { last = last * 0.6 + (Math.random() * 2 - 1) * 0.4; ch[i] = last; }
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+      ambGain = ac.createGain(); ambGain.gain.value = 0;
+      src.connect(lp).connect(ambGain).connect(master); src.start();
+    } catch (e) { ac = null; }
+  }
+  if (ac && ac.state === 'suspended') ac.resume();
+}
+function setMuted(v) { muted = v; store.set('raft_muted', v); if (master) master.gain.value = v ? 0 : 1; }
+function beep(f, dur, type = 'sine', vol = 0.12, slide = 0, delay = 0) {
+  if (!ac || muted) return;
+  const t0 = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t0 + dur);
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g).connect(master); o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function swish(vol = 0.05, freq = 1300, dur = 0.2) {
+  if (!ac || muted) return;
+  const t0 = ac.currentTime, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noiseBuf; s.playbackRate.value = 0.8 + Math.random() * 0.5;
+  f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.8;
+  g.gain.setValueAtTime(0.001, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.04); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  s.connect(f).connect(g).connect(master); s.start(t0, Math.random() * 1.5, dur + 0.05);
+}
+const sfx = {
+  coin: c => { const f = 780 * Math.pow(1.04, Math.min(c, 14)); beep(f, 0.08, 'triangle', 0.1); beep(f * 1.5, 0.12, 'triangle', 0.1, 0, 0.06); },
+  hit: () => { beep(160, 0.25, 'sawtooth', 0.16, -110); swish(0.14, 500, 0.35); },
+  bank: () => { beep(110, 0.08, 'triangle', 0.06, -40); },
+  ring: () => { [523, 784, 1047].forEach((f, i) => beep(f, 0.14, 'sine', 0.12, 0, i * 0.07)); },
+  near: () => { beep(1200, 0.07, 'sine', 0.05, 500); },
+  duck: () => { beep(620, 0.07, 'square', 0.035, -200); beep(560, 0.09, 'square', 0.035, -200, 0.11); },
+  tick: () => { beep(520, 0.1, 'triangle', 0.1); },
+  go: () => { beep(1040, 0.3, 'triangle', 0.12); },
+  win: () => { [523, 659, 784, 1047].forEach((f, i) => beep(f, 0.22, 'triangle', 0.12, 0, i * 0.13)); },
+  dead: () => { [392, 330, 262, 196].forEach((f, i) => beep(f, 0.25, 'sawtooth', 0.09, 0, i * 0.16)); },
+};
+
+// ---------- 逻辑 ----------
+function splash(x, d, n, color = '#fff', sp = 130) {
+  for (let i = 0; i < n; i++) {
+    const an = Math.random() * TAU, s = sp * (0.3 + Math.random() * 0.7);
+    particles.push({ x, d, vx: Math.cos(an) * s, vd: Math.sin(an) * s, life: 0.5 + Math.random() * 0.4, max: 0.9, r: 2 + Math.random() * 3, color });
+  }
+}
+function floatText(text, x, d, color = '#fff', size = 16) { floaters.push({ text, x, d, color, size, life: 1 }); }
+
+// 碰到障碍：沿法线弹开；同一障碍在分开前不会重复扣血
+function collide(obj, nx, nd) {
+  const vn = raft.vx * nx + raft.vd * nd;
+  if (vn < 0) { raft.vx -= 1.8 * vn * nx; raft.vd -= 1.8 * vn * nd; }
+  raft.vx += nx * 110; raft.vd += nd * 110;
+  if (obj.lock || raft.inv > 0 || state !== 'play') return;
+  obj.lock = true; obj.hit = true;
+  raft.hp--; raft.hits++; raft.inv = 2; raft.squash = 1; raft.combo = 0; shake = 0.35; flash = 0.25;
+  splash(raft.x - nx * RAFT_R, raft.d - nd * RAFT_R, 16);
+  floatText('-1', raft.x, raft.d + 24, '#ff8787', 20);
+  sfx.hit();
+  if (raft.hp <= 0) { state = 'dead'; sfx.dead(); setTimeout(showDead, 1300); }
+}
+
+let bankSfxCd = 0;
+function update(dt) {
+  T += dt;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.life -= dt; p.x += p.vx * dt; p.d += p.vd * dt; p.vx *= 0.96; p.vd *= 0.96;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = wake.length - 1; i >= 0; i--) { wake[i].life -= dt; if (wake[i].life <= 0) wake.splice(i, 1); }
+  for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.life -= dt * 1.1; f.d += 34 * dt; if (f.life <= 0) floaters.splice(i, 1); }
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    const c = confetti[i]; c.y += c.vy * dt; c.x += (c.vx + Math.sin(T * 3 + c.ph) * 30) * dt; c.rot += c.vr * dt;
+    if (c.y > H + 20) confetti.splice(i, 1);
+  }
+  shake = Math.max(0, shake - dt); flash = Math.max(0, flash - dt); bankSfxCd -= dt;
+  if (state === 'menu' || state === 'pause') return;
+  if (state === 'ready') {
+    const before = Math.ceil(countdown / 0.7); countdown -= dt;
+    const after = Math.ceil(countdown / 0.7);
+    if (after < before) { if (after > 0) sfx.tick(); else { state = 'play'; raft.vd = 60; sfx.go(); } }
+    return;
+  }
+  LT += dt; placeLogs();
+
+  const playing = state === 'play';
+  const L = playing && input.L, R = playing && input.R, U = playing && input.U, B = playing && input.B;
+  const fwd = U || (L && R);
+  const steer = fwd && L === R ? 0 : (R ? 1 : 0) - (L ? 1 : 0);
+  let thrust = fwd ? 1 : steer ? 0.55 : 0;
+  if (B && !fwd) thrust = -0.6;
+
+  // 转向
+  const slope = riverSlope(raft.d), aTan = Math.atan(slope);
+  raft.av += (steer * 2.7 - raft.av) * Math.min(1, 9 * dt);
+  raft.a += raft.av * dt;
+  if (!steer) raft.a += (aTan - raft.a) * 0.9 * dt;       // 水流会慢慢把船头带正
+  if (state === 'dead') raft.a += dt * 2.5;
+  else raft.a = clamp(raft.a, -1.3, 1.3);
+
+  // 水流
+  const cx = riverCx(raft.d), w = riverW(raft.d), n = (raft.x - cx) / w;
+  const boost = boostAt(raft.d);
+  const flow = BASE_FLOW * (1 - 0.4 * n * n) * (1 + 1.3 * boost) * (playing ? 1 : 0.5);
+  const il = 1 / Math.hypot(slope, 1), ux = flow * slope * il, ud = flow * il;
+  const ACC = 215;
+  raft.vx += ((ux - raft.vx) * 1.4 + thrust * ACC * Math.sin(raft.a)) * dt;
+  raft.vd += ((ud - raft.vd) * 1.4 + thrust * ACC * Math.cos(raft.a)) * dt;
+  raft.x += raft.vx * dt; raft.d += raft.vd * dt;
+  if (raft.d < -140) { raft.d = -140; raft.vd = Math.max(0, raft.vd); }
+  raft.squash = Math.max(0, raft.squash - dt * 4);
+
+  // 划桨动画 + 桨花
+  const actL = (fwd || B || R) && thrust, actR = (fwd || B || L) && thrust;
+  if (thrust) {
+    const before = Math.floor(raft.stroke / TAU + 0.25);
+    raft.stroke += dt * 9 * Math.sign(thrust);
+    if (Math.floor(raft.stroke / TAU + 0.25) !== before) {
+      for (const [s, on] of [[-1, actL], [1, actR]]) if (on)
+        splash(raft.x + s * 30 * Math.cos(raft.a), raft.d - s * 30 * Math.sin(raft.a), 3, 'rgba(255,255,255,.9)', 55);
+      swish(0.035, 1500, 0.16);
+    }
+  }
+  raft.strokeL += ((actL ? 1 : 0) - raft.strokeL) * Math.min(1, 12 * dt);
+  raft.strokeR += ((actR ? 1 : 0) - raft.strokeR) * Math.min(1, 12 * dt);
+
+  // 尾迹
+  const spd = Math.hypot(raft.vx, raft.vd);
+  if (Math.random() < dt * (4 + spd * 0.12)) {
+    wake.push({ x: raft.x - Math.sin(raft.a) * 16 + (Math.random() - 0.5) * 14, d: raft.d - Math.cos(raft.a) * 16, life: 0.9, r: 3 + Math.random() * 4 });
+  }
+
+  // 河岸
+  const c2 = riverCx(raft.d), w2 = riverW(raft.d), off = raft.x - c2, lim = w2 - RAFT_R + 2;
+  if (Math.abs(off) > lim) {
+    const s = Math.sign(off);
+    raft.x = c2 + s * lim;
+    if (raft.vx * s > 0) {
+      if (raft.vx * s > 60 && bankSfxCd <= 0) { sfx.bank(); bankSfxCd = 0.4; splash(raft.x + s * RAFT_R, raft.d, 5, '#e8d9a8', 60); }
+      raft.vx = -raft.vx * 0.3;
+    }
+    raft.vd -= raft.vd * 1.2 * dt;
+  }
+
+  // 鸭子：靠近就飞走
+  for (const k of ducks) {
+    if (k.fly > 0) { k.fly += dt; k.x += k.s * 150 * dt; k.d += 130 * dt; continue; }
+    k.x = riverCx(k.d) + k.n * riverW(k.d) + Math.sin(T * 0.8 + k.ph) * 5;
+    if (Math.abs(k.d - raft.d) < 85 && Math.hypot(k.x - raft.x, k.d - raft.d) < 85) {
+      k.fly = 0.001; splash(k.x, k.d, 5, '#fff', 60); if (playing) sfx.duck();
+    }
+  }
+
+  if (playing) {
+    raft.time += dt; raft.inv = Math.max(0, raft.inv - dt);
+    // 礁石
+    for (const r of rocks) {
+      const dd = raft.d - r.d;
+      if (dd > 60) {
+        if (!r.passed) { r.passed = true;
+          if (!r.hit && r.min < r.r + RAFT_R + 9 && spd > 110) { raft.score += 50; raft.near++; floatText('好险！+50', raft.x, raft.d + 30, '#c5f6fa', 15); sfx.near(); } }
+        continue;
+      }
+      if (dd < -60) continue;
+      const dx = raft.x - r.x, dist = Math.hypot(dx, dd), min = r.r + RAFT_R - 2;
+      if (dist < r.min) r.min = dist;
+      if (dist < min) {
+        const nx = dx / (dist || 1), nd = dd / (dist || 1);
+        raft.x = r.x + nx * min; raft.d = r.d + nd * min;
+        collide(r, nx, nd); if (state !== 'play') break;
+      } else if (dist > min + 24) r.lock = false;
+    }
+    // 漂木（胶囊体）
+    if (state === 'play') for (const l of logs) {
+      if (Math.abs(l.d - raft.d) > 70) { l.lock = false; continue; }
+      const px = clamp(raft.x, l.x - l.len, l.x + l.len), dx = raft.x - px, dd = raft.d - l.d;
+      const dist = Math.hypot(dx, dd), min = 8 + RAFT_R - 2;
+      if (dist < min) {
+        const nx = dx / (dist || 1), nd = dist ? dd / dist : -1;
+        raft.x = px + nx * min; raft.d = l.d + nd * min;
+        collide(l, nx, nd); if (state !== 'play') break;
+      } else if (dist > min + 24) l.lock = false;
+    }
+    // 星星与连击
+    for (const c of coins) {
+      if (c.got || Math.abs(c.d - raft.d) > 40) continue;
+      if (Math.hypot(c.x - raft.x, c.d - raft.d) < 26) {
+        c.got = true; raft.coins++; raft.combo++; raft.bestCombo = Math.max(raft.bestCombo, raft.combo);
+        const pts = 100 + 10 * Math.min(raft.combo - 1, 20); raft.score += pts;
+        sfx.coin(raft.combo); splash(c.x, c.d, 6, '#ffe066', 80);
+        floatText("+" + pts, c.x, c.d + 28, '#ffe066', 14);
+      }
+    }
+    while (nextCoin < coins.length && coins[nextCoin].d < raft.d - 45) { if (!coins[nextCoin].got) raft.combo = 0; nextCoin++; }
+    // 救生圈
+    for (const g of rings) {
+      if (g.got || Math.hypot(g.x - raft.x, g.d - raft.d) > 28) continue;
+      g.got = true; sfx.ring(); splash(g.x, g.d, 10, '#ffc9c9', 90);
+      if (raft.hp < 3) { raft.hp++; floatText('气囊 +1', g.x, g.d + 16, '#ff8787', 17); }
+      else { raft.score += 300; floatText('+300', g.x, g.d + 16, '#ffe066', 17); }
+    }
+    if (state === 'play' && raft.d >= END) win();
+  } else if (state === 'dead') {
+    raft.sink = Math.min(1, raft.sink + dt * 0.9);
+    if (Math.random() < dt * 14) particles.push({ x: raft.x + (Math.random() - 0.5) * 20, d: raft.d + (Math.random() - 0.5) * 20, vx: 0, vd: 20, life: 0.6, max: 0.6, r: 2 + Math.random() * 3, color: 'rgba(255,255,255,.8)' });
+  }
+  cam.d += (raft.d + raft.vd * 0.25 - cam.d) * Math.min(1, 5 * dt);
+}
+
+let result = null;
+function win() {
+  state = 'win'; sfx.win();
+  const timeBonus = Math.round(Math.max(0, 80 - raft.time) * 30), hpBonus = raft.hp * 500;
+  const total = coins.length, gotCoins = raft.coins >= Math.ceil(total * 0.8), clean = raft.hits === 0;
+  result = { stars: 1 + (gotCoins ? 1 : 0) + (clean ? 1 : 0), gotCoins, clean, timeBonus, hpBonus,
+             score: raft.score + timeBonus + hpBonus, time: raft.time, fast: raft.time <= PAR_TIME };
+  const COL = ['#ffd23f', '#ff6b6b', '#4dabf7', '#69db7c', '#ffffff', '#ff922b'];
+  for (let i = 0; i < 110; i++) confetti.push({ x: Math.random() * W, y: -20 - Math.random() * 320, vy: 110 + Math.random() * 150,
+    vx: (Math.random() - 0.5) * 50, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 12, ph: Math.random() * TAU, c: COL[i % COL.length], s: 5 + Math.random() * 5 });
+  setTimeout(showWin, 1100);
+}
+
+// ---------- 绘制 ----------
+let baseY = 0, camD = 0;
+const Y = d => baseY - (d - camD);
+
+function star(x, y, r, rot = 0) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = rot + i * Math.PI / 5 - Math.PI / 2, rr = i % 2 ? r * 0.45 : r;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+function heart(x, y, s) {
+  ctx.beginPath(); ctx.moveTo(x, y + s * 0.9);
+  ctx.bezierCurveTo(x - s * 1.4, y - s * 0.1, x - s * 0.7, y - s * 1.1, x, y - s * 0.35);
+  ctx.bezierCurveTo(x + s * 0.7, y - s * 1.1, x + s * 1.4, y - s * 0.1, x, y + s * 0.9);
+  ctx.closePath();
+}
+function outlined(text, x, y, size, fill = '#fff', align = 'center') {
+  ctx.font = `700 ${size}px ${FONT}`;
+  ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(3, size * 0.26); ctx.strokeStyle = 'rgba(8,45,66,.85)'; ctx.strokeText(text, x, y);
+  ctx.fillStyle = fill; ctx.fillText(text, x, y);
+}
+const circle = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); };
+const oval = (x, y, rx, ry, rot = 0) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, TAU); };
+
+function drawBanner(d, label, c1, c2) {
+  const y = Y(d); if (y < -40 || y > H + 40) return;
+  const xl = riverCx(d) - riverW(d) - 6, xr = riverCx(d) + riverW(d) + 6;
+  const n = 18, cw = (xr - xl) / n;
+  ctx.fillStyle = 'rgba(0,40,70,.18)'; ctx.fillRect(xl, y + 8, xr - xl, 7);
+  for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) {
+    ctx.fillStyle = (i + j) % 2 ? c1 : c2; ctx.fillRect(xl + i * cw, y - 8 + j * 8, cw + 0.5, 8);
+  }
+  ctx.fillStyle = '#6b4423';
+  ctx.fillRect(xl - 6, y - 26, 7, 38); ctx.fillRect(xr - 1, y - 26, 7, 38);
+  outlined(label, (xl + xr) / 2, y - 24, 18, '#fff');
+}
+
+function drawBridge(d) {
+  const y = Y(d); if (y < -50 || y > H + 50) return;
+  const xl = riverCx(d) - riverW(d) - 34, xr = riverCx(d) + riverW(d) + 34, h = 34;
+  ctx.fillStyle = 'rgba(0,30,50,.22)'; ctx.fillRect(xl + 6, y - h / 2 + 12, xr - xl, h);
+  ctx.fillStyle = '#a9743f'; ctx.fillRect(xl, y - h / 2, xr - xl, h);
+  ctx.strokeStyle = 'rgba(80,45,15,.45)'; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let x = xl + 13; x < xr; x += 13) { ctx.moveTo(x, y - h / 2); ctx.lineTo(x, y + h / 2); }
+  ctx.stroke();
+  ctx.fillStyle = '#6b4423'; ctx.fillRect(xl, y - h / 2 - 3, xr - xl, 6); ctx.fillRect(xl, y + h / 2 - 3, xr - xl, 6);
+  ctx.fillStyle = '#8a5a34'; ctx.fillRect(xl, y - h / 2 - 3, xr - xl, 2); ctx.fillRect(xl, y + h / 2 - 3, xr - xl, 2);
+  ctx.fillStyle = '#4e3118';
+  for (const x of [xl, xl + (xr - xl) / 3, xl + (xr - xl) * 2 / 3, xr]) { ctx.fillRect(x - 4, y - h / 2 - 6, 8, 10); ctx.fillRect(x - 4, y + h / 2 - 5, 8, 10); }
+}
+
+function drawRaft() {
+  const x = raft.x, y = Y(raft.d);
+  if (raft.inv > 0 && state === 'play' && Math.floor(raft.inv * 12) % 2) return;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(raft.a);
+  const sc = 1 - raft.sink * 0.5; ctx.scale(sc * (1 + raft.squash * 0.22), sc * (1 - raft.squash * 0.16)); ctx.globalAlpha = 1 - raft.sink * 0.7;
+  const bob = Math.sin(T * 5) * 0.6;
+  ctx.fillStyle = 'rgba(0,40,70,.25)'; oval(2, 4, 16, 25); ctx.fill();
+  // 桨
+  for (const s of [-1, 1]) {
+    const act = s < 0 ? raft.strokeL : raft.strokeR;
+    const sw = Math.sin(raft.stroke) * 0.75 * act;
+    ctx.save(); ctx.translate(s * 9, -2); ctx.rotate(s * (0.25 + sw));
+    ctx.strokeStyle = '#7a4b22'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(s * 20, 0); ctx.stroke();
+    ctx.fillStyle = '#ffe9a8'; oval(s * 23, 0, 6, 3.5); ctx.fill();
+    ctx.restore();
+  }
+  // 艇身
+  const body = (rx, ry) => { ctx.beginPath(); ctx.roundRect(-rx, -ry, rx * 2, ry * 2, [rx, rx, rx * 0.75, rx * 0.75]); };
+  ctx.fillStyle = '#c92a2a'; body(14, 23 + bob); ctx.fill();
+  ctx.fillStyle = '#ff922b'; body(12.8, 21.8 + bob); ctx.fill();
+  ctx.fillStyle = '#ffc078'; ctx.beginPath(); ctx.ellipse(-8.5, -6, 2, 12, 0.08, 0, TAU); ctx.fill();   // 气囊高光
+  ctx.fillStyle = '#5c3a21'; body(7.5, 16); ctx.fill();
+  ctx.strokeStyle = '#ffd8a8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-7.5, -5); ctx.lineTo(7.5, -5); ctx.moveTo(-7.5, 6); ctx.lineTo(7.5, 6); ctx.stroke();
+  // 两名队员（随划桨前后晃动）
+  const lean = Math.sin(raft.stroke) * 1.2 * Math.max(raft.strokeL, raft.strokeR);
+  for (const [py, col] of [[-10, '#1c7ed6'], [1, '#e8590c']]) {
+    ctx.fillStyle = '#ffe066'; oval(0, py + 3 - lean * 0.4, 6, 4.5); ctx.fill();
+    ctx.fillStyle = col; circle(0, py - lean, 4.6); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; circle(-1.4, py - 1.5 - lean, 1.5); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDuck(k) {
+  const y = Y(k.d), fl = k.fly;
+  if (fl > 1.2) return;
+  ctx.save(); ctx.translate(k.x, y - fl * 20);
+  ctx.globalAlpha = clamp(1.2 - fl, 0, 1);
+  const sc = 1 + fl * 0.5; ctx.scale(sc * (k.s < 0 && fl ? -1 : 1), sc);
+  if (!fl) { ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 1.5; oval(0, 1, 9 + Math.sin(T * 3 + k.ph), 7); ctx.stroke(); }
+  if (fl) { // 翅膀
+    const wg = Math.sin(T * 30) * 5;
+    ctx.fillStyle = k.brown ? '#a47148' : '#f1f3f5';
+    oval(0, -5 - wg * 0.4, 4, 7, 0.3); ctx.fill(); oval(0, 5 + wg * 0.4, 4, 7, -0.3); ctx.fill();
+  }
+  ctx.fillStyle = k.brown ? '#8a5a34' : '#ffffff'; oval(0, 0, 7, 5); ctx.fill();
+  ctx.fillStyle = k.brown ? '#2b8a3e' : '#ffffff'; circle(6, -2, 3.4); ctx.fill();
+  ctx.fillStyle = '#ff922b'; ctx.beginPath(); ctx.moveTo(8.5, -3.5); ctx.lineTo(13, -2); ctx.lineTo(8.5, -0.5); ctx.fill();
+  ctx.fillStyle = '#212529'; circle(6.8, -2.8, 0.8); ctx.fill();
+  ctx.restore();
+}
+
+function draw() {
+  const sx = shake > 0 ? (Math.random() - 0.5) * shake * 26 : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake * 26 : 0;
+  baseY = H * 0.74; camD = cam.d;
+  ctx.save(); ctx.translate(sx, sy);
+  const d0 = camD - (H - baseY) - 40, d1 = camD + baseY + 40;
+
+  // 草地
+  ctx.fillStyle = '#6aa84f'; ctx.fillRect(-20, -20, W + 40, H + 40);
+  for (let i = Math.floor(d0 / 90) - 1; i <= d1 / 90 + 1; i++) {
+    ctx.fillStyle = hash(i, 1) > 0.5 ? 'rgba(86,146,58,.9)' : 'rgba(124,184,92,.7)';
+    oval(hash(i, 2) * W, Y(i * 90 + hash(i, 3) * 90), 40 + hash(i, 4) * 50, 22 + hash(i, 5) * 20); ctx.fill();
+  }
+  // 野花
+  for (let i = Math.floor(d0 / 40); i <= d1 / 40; i++) {
+    const d = i * 40 + hash(i, 91) * 40, x = hash(i, 92) * W;
+    if (Math.abs(x - riverCx(d)) < riverW(d) + 22) continue;
+    ctx.fillStyle = ['#ffffff', '#ffd6e7', '#fff3bf'][((i % 3) + 3) % 3];
+    const y = Y(d); circle(x, y, 2.2); ctx.fill(); circle(x + 5, y + 3, 1.8); ctx.fill(); circle(x - 3, y + 5, 1.8); ctx.fill();
+  }
+
+  // 河道
+  const river = new Path2D(), ST = 16, ds = Math.floor(d0 / ST) * ST;
+  for (let d = ds; d <= d1; d += ST) river.lineTo(riverCx(d) - riverW(d), Y(d));
+  for (let d = Math.ceil(d1 / ST) * ST; d >= ds; d -= ST) river.lineTo(riverCx(d) + riverW(d), Y(d));
+  river.closePath();
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#c9b377'; ctx.lineWidth = 26; ctx.stroke(river);
+  ctx.strokeStyle = '#efe0ae'; ctx.lineWidth = 14; ctx.stroke(river);
+  ctx.fillStyle = '#2a93c9'; ctx.fill(river);
+  ctx.save(); ctx.clip(river);
+  ctx.strokeStyle = 'rgba(120,215,235,.55)'; ctx.lineWidth = 26; ctx.stroke(river);
+  // 深水带
+  ctx.strokeStyle = 'rgba(20,105,170,.3)'; ctx.lineWidth = 110; ctx.lineCap = 'round';
+  ctx.beginPath(); for (let d = ds; d <= d1; d += ST) ctx.lineTo(riverCx(d), Y(d)); ctx.stroke();
+  ctx.strokeStyle = 'rgba(16,88,150,.28)'; ctx.lineWidth = 50; ctx.stroke();
+  // 岸边浪花（流动的虚线）
+  ctx.setLineDash([9, 30]); ctx.lineDashOffset = T * 40; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 4.5; ctx.stroke(river);
+  ctx.setLineDash([]);
+
+  // 急流
+  for (const [a, b] of BOOSTS) {
+    if (b < d0 || a > d1) continue;
+    for (let d = Math.ceil(a / 46) * 46; d < b; d += 46) {
+      const dd = d + (T * 150) % 46, k = boostAt(dd); if (k <= 0) continue;
+      const cx = riverCx(dd), w = riverW(dd) * 0.72, y = Y(dd);
+      ctx.strokeStyle = `rgba(255,255,255,${0.42 * k})`; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(cx - w, y + 16); ctx.lineTo(cx, y - 8); ctx.lineTo(cx + w, y + 16); ctx.stroke();
+    }
+  }
+  // 水纹
+  ctx.lineCap = 'round'; ctx.lineWidth = 2.2;
+  for (let i = Math.floor(d0 / 70) - 1; i <= d1 / 70; i++) for (let k = 0; k < 3; k++) {
+    const fr = (hash(i, 10 + k) + T * (0.5 + hash(i, 20 + k) * 0.4)) % 1;
+    const d = i * 70 + fr * 110, n = hash(i, 30 + k) * 1.7 - 0.85, len = 10 + hash(i, 40 + k) * 16;
+    const x = riverCx(d) + n * riverW(d), sl = riverSlope(d);
+    ctx.strokeStyle = `rgba(255,255,255,${0.34 * Math.sin(fr * Math.PI)})`;
+    ctx.beginPath(); ctx.moveTo(x, Y(d)); ctx.lineTo(x + sl * len, Y(d + len)); ctx.stroke();
+  }
+  // 礁石后的水痕
+  for (const r of rocks) {
+    if (r.d < d0 - 80 || r.d > d1 + 30) continue;
+    const y = Y(r.d), wob = Math.sin(T * 4 + r.seed) * 2;
+    ctx.strokeStyle = 'rgba(255,255,255,.2)'; ctx.lineWidth = 2.5;
+    for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(r.x + s * (r.r + 3), y);
+      ctx.quadraticCurveTo(r.x + s * (r.r + 6), y - r.r - 6, r.x + s * (r.r * 0.6 + wob), y - r.r * 2 - 12); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // 芦苇
+  ctx.strokeStyle = '#3d8b37'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  for (let i = Math.floor(d0 / 38) - 1; i <= d1 / 38 + 1; i++) for (const s of [-1, 1]) {
+    if (hash(i, 100 + s) > 0.42) continue;
+    const d = i * 38 + hash(i, 110 + s) * 30; if (Math.abs(d) < 30 || Math.abs(d - END) < 30) continue;
+    const x = riverCx(d) + s * (riverW(d) + 1), y = Y(d), sway = Math.sin(T * 1.6 + i) * 2;
+    ctx.beginPath();
+    for (let k = -1; k <= 1; k++) { ctx.moveTo(x + k * 3, y + 4); ctx.lineTo(x + k * 5 + sway - s * 2, y - 9 - (k ? 0 : 4)); }
+    ctx.stroke();
+  }
+
+  drawBanner(0, '起点', '#ffffff', '#4dabf7');
+  drawBanner(END, '终点', '#ffffff', '#212529');
+
+  // 尾迹
+  for (const k of wake) {
+    ctx.fillStyle = `rgba(255,255,255,${k.life * 0.45})`;
+    circle(k.x, Y(k.d), k.r * (1.6 - k.life * 0.6)); ctx.fill();
+  }
+  // 星星
+  for (const c of coins) {
+    if (c.got || c.d < d0 || c.d > d1) continue;
+    const y = Y(c.d) + Math.sin(T * 3 + c.d) * 2.5;
+    ctx.fillStyle = 'rgba(255,240,150,.28)'; circle(c.x, y, 14); ctx.fill();
+    star(c.x, y, 10, Math.sin(T * 2 + c.d) * 0.25); ctx.fillStyle = '#ffd23f'; ctx.fill();
+    ctx.strokeStyle = '#c78a00'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; circle(c.x - 2.5, y - 2.5, 1.6); ctx.fill();
+  }
+  // 救生圈
+  for (const g of rings) {
+    if (g.got || g.d < d0 || g.d > d1) continue;
+    const y = Y(g.d) + Math.sin(T * 2.5 + g.d) * 2, pul = 1 + Math.sin(T * 4) * 0.06;
+    ctx.save(); ctx.translate(g.x, y); ctx.rotate(T * 0.8); ctx.scale(pul, pul);
+    ctx.fillStyle = 'rgba(255,200,200,.3)'; circle(0, 0, 19); ctx.fill();
+    ctx.lineWidth = 7; ctx.strokeStyle = '#fff'; circle(0, 0, 10); ctx.stroke();
+    ctx.strokeStyle = '#fa5252';
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(0, 0, 10, i * Math.PI / 2, i * Math.PI / 2 + 0.75); ctx.stroke(); }
+    ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(100,20,20,.5)'; circle(0, 0, 13.5); ctx.stroke(); circle(0, 0, 6.5); ctx.stroke();
+    ctx.restore();
+  }
+  // 礁石
+  for (const r of rocks) {
+    if (r.d < d0 - 30 || r.d > d1 + 30) continue;
+    const y = Y(r.d), pul = 1 + Math.sin(T * 2.5 + r.seed) * 0.06;
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 3;
+    oval(r.x, y + 2, (r.r + 5) * pul, (r.r + 4) * pul); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,40,70,.22)'; oval(r.x + 3, y + 4, r.r, r.r * 0.9); ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * TAU, rr = r.r * (0.82 + hash(r.seed, i) * 0.26);
+      ctx.lineTo(r.x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fillStyle = '#6c757d'; ctx.fill(); ctx.strokeStyle = '#495057'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#adb5bd'; oval(r.x - r.r * 0.25, y - r.r * 0.28, r.r * 0.42, r.r * 0.28, -0.5); ctx.fill();
+    if (hash(r.seed, 77) > 0.55) { ctx.fillStyle = '#74b816'; oval(r.x + r.r * 0.3, y + r.r * 0.25, r.r * 0.3, r.r * 0.2, 0.4); ctx.fill(); }
+  }
+  // 漂木
+  for (const l of logs) {
+    if (l.d < d0 || l.d > d1) continue;
+    const y = Y(l.d);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 22; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(l.x - l.len, y + 1); ctx.lineTo(l.x + l.len, y + 1); ctx.stroke();
+    ctx.strokeStyle = '#5c3a21'; ctx.lineWidth = 16; ctx.beginPath(); ctx.moveTo(l.x - l.len, y); ctx.lineTo(l.x + l.len, y); ctx.stroke();
+    ctx.strokeStyle = '#8a5a34'; ctx.lineWidth = 11; ctx.beginPath(); ctx.moveTo(l.x - l.len, y - 1); ctx.lineTo(l.x + l.len, y - 1); ctx.stroke();
+    ctx.strokeStyle = '#5c3a21'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(l.x - l.len + 6, y - 2); ctx.lineTo(l.x + 4, y - 2); ctx.moveTo(l.x - 6, y + 2); ctx.lineTo(l.x + l.len - 8, y + 2); ctx.stroke();
+    ctx.fillStyle = '#d9b382'; oval(l.x + l.len + 5, y, 3.5, 6.5); ctx.fill();
+    ctx.strokeStyle = '#a47148'; ctx.lineWidth = 1; oval(l.x + l.len + 5, y, 1.6, 3.2); ctx.stroke();
+  }
+  for (const k of ducks) if (k.d > d0 && k.d < d1 + 60 && !k.fly) drawDuck(k);
+
+  drawRaft();
+
+  for (const p of particles) {
+    ctx.globalAlpha = clamp(p.life / p.max, 0, 1); ctx.fillStyle = p.color;
+    circle(p.x, Y(p.d), p.r); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  for (const b of BRIDGES) drawBridge(b);
+  for (const k of ducks) if (k.fly && k.d > d0 && k.d < d1 + 60) drawDuck(k);
+
+  // 岸边的树和石头
+  for (let i = Math.floor(d0 / 46) - 1; i <= d1 / 46 + 1; i++) for (const s of [-1, 1]) {
+    const d = i * 46 + hash(i, 50 + s) * 30, edge = riverCx(d) + s * (riverW(d) + 30);
+    const room = s < 0 ? edge : W - edge; if (room < 8) continue;
+    if (BRIDGES.some(b => Math.abs(b - d) < 40)) continue;
+    const x = edge + s * hash(i, 60 + s) * room, y = Y(d), r = 13 + hash(i, 70 + s) * 9;
+    if (hash(i, 80 + s) < 0.16) {
+      ctx.fillStyle = '#8d99a6'; oval(x, y, r * 0.6, r * 0.45); ctx.fill();
+      ctx.fillStyle = '#b3bcc6'; oval(x - r * 0.15, y - r * 0.12, r * 0.3, r * 0.18); ctx.fill();
+      continue;
+    }
+    const sw = Math.sin(T * 1.2 + i) * 0.8;
+    ctx.fillStyle = 'rgba(30,70,30,.3)'; circle(x + 4, y + 6, r); ctx.fill();
+    ctx.fillStyle = '#2f7d32'; circle(x, y, r); ctx.fill();
+    ctx.fillStyle = '#43a047'; circle(x - r * 0.2 + sw, y - r * 0.25, r * 0.68); ctx.fill();
+    ctx.fillStyle = '#66bb6a'; circle(x - r * 0.3 + sw, y - r * 0.38, r * 0.34); ctx.fill();
+  }
+
+  // 飘字
+  for (const f of floaters) { ctx.globalAlpha = clamp(f.life * 2, 0, 1); outlined(f.text, f.x, Y(f.d), f.size, f.color); }
+  ctx.globalAlpha = 1;
+
+  // 提示牌
+  for (const [d, text] of SIGNS) {
+    const y = Y(d + 150); if (y < -30 || y > H + 30) continue;
+    ctx.globalAlpha = clamp(Math.min((H - y) / 120, (y - 60) / 120), 0, 1);
+    outlined(text, W / 2, y, 19, '#fff8dc');
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  // 云影 + 暗角
+  ctx.fillStyle = 'rgba(10,40,30,.07)';
+  for (let i = 0; i < 3; i++) {
+    const cx = ((T * (9 + i * 4) + i * 260) % (W + 500)) - 250, cy = ((camD * 0.25 + i * 370 + T * 5) % (H + 400) + H + 400) % (H + 400) - 200;
+    oval(cx, H - cy, 170 + i * 30, 90 + i * 16, 0.3); ctx.fill();
+  }
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.75);
+  vg.addColorStop(0, 'rgba(0,20,30,0)'); vg.addColorStop(1, 'rgba(0,20,30,.28)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+  // 急流速度线
+  const bz = state === 'play' ? boostAt(raft.d) : 0;
+  if (bz > 0) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.3 * bz})`; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    for (let i = 0; i < 12; i++) {
+      const x = i % 2 ? hash(i, 5) * 70 + 6 : W - 6 - hash(i, 6) * 70, y = ((hash(i, 7) * H + T * (700 + hash(i, 8) * 500)) % (H + 120)) - 60;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 50 + hash(i, 9) * 50); ctx.stroke();
+    }
+  }
+  if (flash > 0) { ctx.fillStyle = `rgba(255,60,60,${flash * 1.2})`; ctx.fillRect(0, 0, W, H); }
+  for (const c of confetti) {
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot); ctx.fillStyle = c.c;
+    const hh = c.s * 0.6 * Math.cos(c.rot * 2); ctx.fillRect(-c.s / 2, -hh / 2, c.s, hh); ctx.restore();
+  }
+  if (state !== 'menu') drawHUD();
+  if (state === 'ready') {
+    const n = Math.ceil(countdown / 0.7), fr = countdown / 0.7 - (n - 1);
+    ctx.globalAlpha = clamp(fr * 2.5, 0, 1);
+    outlined(String(n), W / 2, H * 0.4, 90 + (1 - fr) * 50, '#ffe066');
+    ctx.globalAlpha = 1;
+  } else if (state === 'play' && raft.time < 0.8) {
+    ctx.globalAlpha = 1 - raft.time / 0.8; outlined('出发！', W / 2, H * 0.4, 56 + raft.time * 30, '#ffe066'); ctx.globalAlpha = 1;
+  }
+}
+
+const BTN = { pause: [28, 64], mute: [62, 64], r: 14 };
+function drawHUD() {
+  const g = ctx.createLinearGradient(0, 0, 0, 90);
+  g.addColorStop(0, 'rgba(8,45,66,.62)'); g.addColorStop(1, 'rgba(8,45,66,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 90);
+  for (let i = 0; i < 3; i++) {
+    const lost = i >= raft.hp, jig = i === raft.hp && raft.squash > 0 ? Math.sin(T * 60) * 3 : 0;
+    heart(26 + i * 30 + jig, 27, 10);
+    ctx.fillStyle = lost ? 'rgba(255,255,255,.22)' : '#ff4d4f'; ctx.fill();
+    ctx.strokeStyle = 'rgba(8,45,66,.8)'; ctx.lineWidth = 2; ctx.stroke();
+    if (!lost) { ctx.fillStyle = 'rgba(255,255,255,.6)'; circle(22 + i * 30, 23, 2.2); ctx.fill(); }
+  }
+  star(W / 2 - 34, 26, 11); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#8a6100'; ctx.lineWidth = 1.5; ctx.stroke();
+  outlined(`${raft.coins}/${coins.length}`, W / 2 - 18, 27, 18, '#fff', 'left');
+  if (raft.combo >= 3) outlined(`连击 ×${raft.combo}`, W / 2, 52, 14 + Math.min(raft.combo, 20) * 0.2, '#ffe066');
+  outlined(raft.time.toFixed(1) + ' 秒', W - 16, 27, 18, '#fff', 'right');
+  outlined(String(raft.score), W - 34, 52, 14, '#c5f6fa', 'right');
+  // 暂停 / 静音按钮
+  for (const key of ['pause', 'mute']) {
+    const [bx, by] = BTN[key];
+    ctx.fillStyle = 'rgba(8,45,66,.55)'; circle(bx, by, BTN.r); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
+    if (key === 'pause') { ctx.fillRect(bx - 5, by - 6, 3.5, 12); ctx.fillRect(bx + 1.5, by - 6, 3.5, 12); }
+    else {
+      ctx.beginPath(); ctx.moveTo(bx - 7, by - 2.5); ctx.lineTo(bx - 3.5, by - 2.5); ctx.lineTo(bx + 0.5, by - 6.5); ctx.lineTo(bx + 0.5, by + 6.5); ctx.lineTo(bx - 3.5, by + 2.5); ctx.lineTo(bx - 7, by + 2.5); ctx.fill();
+      ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.beginPath();
+      if (muted) { ctx.moveTo(bx + 3, by - 3.5); ctx.lineTo(bx + 8, by + 3.5); ctx.moveTo(bx + 8, by - 3.5); ctx.lineTo(bx + 3, by + 3.5); }
+      else { ctx.arc(bx + 1, by, 4.5, -0.8, 0.8); ctx.moveTo(bx + 6.2, by - 5.4); ctx.arc(bx + 1, by, 7.5, -0.8, 0.8); }
+      ctx.stroke();
+    }
+  }
+  // 进度条
+  const bx = W - 16, by0 = 96, by1 = H - 150, p = clamp(raft.d / END, 0, 1);
+  ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(8,45,66,.55)'; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
+  ctx.strokeStyle = '#7fe0ff'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(bx, by1); ctx.lineTo(bx, by1 - (by1 - by0) * p); ctx.stroke();
+  ctx.fillStyle = '#ff922b'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  oval(bx, by1 - (by1 - by0) * p, 6, 9); ctx.fill(); ctx.stroke();
+  outlined('终', bx, by0 - 15, 13, '#fff');
+  if (boostAt(raft.d) > 0.5 && state === 'play') outlined('急流加速 »', W / 2, 84, 17, '#c5f6fa');
+  // 触屏按钮提示
+  if (isTouch && (state === 'play' || state === 'ready')) {
+    for (const [s, on] of [[-1, input.L], [1, input.R]]) {
+      const x = W / 2 + s * (W / 2 - 62), y = H - 70;
+      ctx.fillStyle = on ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.16)';
+      circle(x, y, 42); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.85)';
+      ctx.beginPath(); ctx.moveTo(x + s * 18, y); ctx.lineTo(x - s * 10, y - 18); ctx.lineTo(x - s * 10, y + 18); ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+// ---------- 界面 ----------
+function show(html, btn, fn) {
+  panel.innerHTML = html + `<button id="go">${btn}</button>`;
+  panel.style.animation = 'none'; void panel.offsetWidth; panel.style.animation = '';
+  overlay.classList.remove('hidden');
+  document.getElementById('go').onclick = e => { e.stopPropagation(); fn(); };
+}
+const starsHtml = n => `<div class="stars">${[0, 1, 2].map(i => `<span class="${i < n ? 'on' : 'off'}" style="--i:${i}">★</span>`).join('')}</div>`;
+const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ',');
+
+function showMenu() {
+  state = 'menu';
+  const b = store.get('raft_l1_best', null);
+  show(`<h1>橡皮艇漂流</h1><h2>第一关 · 青溪谷</h2>
+    <p>${isTouch ? '按住屏幕<b>左侧 / 右侧</b>划桨转向<br>两侧<b>同时按住</b>全力前进'
+      : '<kbd>←</kbd> <kbd>→</kbd> 划桨转向　<kbd>↑</kbd> 全力前进<br><kbd>↓</kbd> 倒划减速　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音'}</p>
+    <p>顺流而下，沿着星星走，避开礁石与漂木。<br>橡皮艇只经得起 3 次碰撞！</p>
+    ${b ? `<p class="small">最佳：${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒</p>` : ''}`, '出发！', () => start());
+}
+function start(skipCountdown) {
+  audio(); reset(); overlay.classList.add('hidden');
+  if (skipCountdown) { state = 'play'; raft.vd = 60; } else { state = 'ready'; countdown = 2.1; sfx.tick(); }
+}
+function showWin() {
+  if (state !== 'win') return;
+  const r = result, total = coins.length;
+  const old = store.get('raft_l1_best', null);
+  const best = { stars: Math.max(r.stars, old ? old.stars : 0), score: Math.max(r.score, old ? old.score || 0 : 0), time: Math.min(r.time, old ? old.time : 1e9) };
+  const isNew = old && (r.score > (old.score || 0));
+  store.set('raft_l1_best', best);
+  for (let i = 0; i < r.stars; i++) beep(660 + i * 220, 0.18, 'triangle', 0.1, 0, 0.25 + i * 0.32);
+  const mark = ok => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✔' : '✘'}</span>`;
+  show(`<h1>到达终点！</h1><h2>第一关 · 青溪谷</h2>${starsHtml(r.stars)}
+    <p class="score">${fmt(r.score)}<span class="small"> 分</span></p>
+    <p class="small">${isNew ? '<span class="new">新纪录！</span>' : old ? `最高 ${fmt(best.score)} 分` : ''}</p>
+    <div class="stats"><div><b>${r.time.toFixed(1)}</b>用时(秒)</div><div><b>${raft.coins}/${total}</b>星星</div><div><b>×${raft.bestCombo}</b>最高连击</div></div>
+    <div class="goals">${mark(true)} 抵达终点<br>${mark(r.gotCoins)} 收集 80% 以上的星星<br>${mark(r.clean)} 全程零碰撞</div>
+    <p class="small">${r.fast ? `⚡ ${PAR_TIME} 秒内完成　` : ''}第二关敬请期待</p>`, '再玩一次', () => start());
+}
+function showDead() {
+  if (state !== 'dead') return;
+  const pct = Math.max(0, Math.round(raft.d / END * 100));
+  const tip = raft.d > 5000 ? '漂木会来回漂动：按 ↓ 或松手减速，等它让开再冲过去。' : '星星标出的就是安全航线。<br>看到礁石提前转向，别等到跟前！';
+  show(`<h1>橡皮艇漏气了…</h1><h2>已漂流 ${pct}% · ${raft.coins} 颗星星</h2>
+    <p>${isTouch ? tip.replace('按 ↓ 或松手', '松手') : tip}</p>`, '再试一次', () => start());
+}
+function togglePause() {
+  if (state === 'play') { state = 'pause'; show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p>${isTouch ? '' : '<p class="small">按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始</p>'}`, '继续', togglePause); }
+  else if (state === 'pause') { state = 'play'; overlay.classList.add('hidden'); }
+}
+
+// ---------- 输入 ----------
+const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', ArrowUp: 'U', w: 'U', W: 'U', ArrowDown: 'B', s: 'B', S: 'B' };
+const pointers = new Map();
+window.addEventListener('keydown', e => {
+  if (KEYS[e.key]) { input[KEYS[e.key]] = true; e.preventDefault(); return; }
+  if (e.repeat) return;
+  if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
+  else if (e.key === 'm' || e.key === 'M') setMuted(!muted);
+  else if (e.key === 'r' || e.key === 'R') { if (state !== 'menu') start(); }
+  else if (e.key === 'Enter' || e.key === ' ') {
+    const b = document.getElementById('go');
+    if (b && !overlay.classList.contains('hidden')) b.click();
+    else if (e.key === ' ') input.U = true;
+    e.preventDefault();
+  }
+});
+window.addEventListener('keyup', e => { if (KEYS[e.key]) input[KEYS[e.key]] = false; if (e.key === ' ') input.U = false; });
+function autoPause() { input.L = input.R = input.U = input.B = false; pointers.clear(); if (state === 'play') togglePause(); }
+window.addEventListener('blur', autoPause);
+document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
+
+function syncPointers() {
+  let L = false, R = false;
+  for (const side of pointers.values()) { if (side < 0) L = true; else R = true; }
+  input.L = L; input.R = R;
+}
+function logical(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+canvas.addEventListener('pointerdown', e => {
+  audio();
+  const [x, y] = logical(e);
+  if (state === 'play' || state === 'ready') {
+    if (Math.hypot(x - BTN.pause[0], y - BTN.pause[1]) < BTN.r + 6) { togglePause(); return; }
+    if (Math.hypot(x - BTN.mute[0], y - BTN.mute[1]) < BTN.r + 6) { setMuted(!muted); return; }
+  }
+  pointers.set(e.pointerId, x < W / 2 ? -1 : 1); syncPointers(); e.preventDefault();
+});
+canvas.addEventListener('pointermove', e => { if (pointers.has(e.pointerId)) { pointers.set(e.pointerId, logical(e)[0] < W / 2 ? -1 : 1); syncPointers(); } });
+for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, e => { if (pointers.delete(e.pointerId)) syncPointers(); });
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// ---------- 主循环 ----------
+const DT = 1 / 120;
+let last = performance.now(), acc = 0, manual = false;
+function frame(now) {
+  if (!manual) {
+    acc += Math.min(0.1, (now - last) / 1000);
+    while (acc >= DT) { update(DT); acc -= DT; }
+  }
+  last = now;
+  if (ambGain) {
+    const active = state === 'play' || state === 'ready' || state === 'win';
+    const target = active ? 0.05 + 0.09 * boostAt(raft.d) + Math.min(1, Math.hypot(raft.vx, raft.vd) / 260) * 0.04 : 0.02;
+    ambGain.gain.setTargetAtTime(target, ac.currentTime, 0.25);
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+reset();
+showMenu();
+requestAnimationFrame(frame);
+
+// 供自动化验收使用
+window.__raft = {
+  get state() { return state; }, get raft() { return raft; }, get result() { return result; },
+  get level() { return { rocks, logs, coins, rings, ducks, END }; },
+  input, safeX, riverCx, riverW, start, draw,
+  setManual(v) { manual = v; }, step() { update(DT); },
+};
+})();
+</script>
+</body>
+</html>
