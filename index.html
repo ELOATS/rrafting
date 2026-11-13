@@ -250,7 +250,7 @@ const LEVELS = [
     boosts: [[3300, 3900], [5900, 6400], [7700, 8500]], bridges: [2695, 6595],
     logs: [5250, 5650, 6700, 7300], rings: [4570, 7450], ducks: [[620, -1], [2130, 1], [4230, -1], [5460, 1], [8640, -1]],
     signs: [[120, tSteer], [470, isTouch ? '两侧同时按住  划桨前进' : '按 ↑ 划桨前进'], [820, '沿着星星走，避开礁石！'], [1400, tSprint],
-      [3180, '前方急流！'], [4420, '救生圈可以补气'], [5080, '小心漂木，看准时机！'], [7560, '最后冲刺！']] },
+      [3180, '前方急流！'], [4420, '救生圈可以补气'], [5080, '漂木顺流而下，从旁边绕过去'], [7560, '最后冲刺！']] },
   { id: 2, name: '鹰嘴峡', theme: 'canyon', seed: 7302119, end: 11000, flow: 96, par: 60, w0: 104,
     intro: '峡谷更窄、水更急，还有会把艇吸进去的漩涡。',
     cx: d => W / 2 + 78 * smooth(200, 800, d) * (Math.sin(d / 470) * 0.72 + Math.sin(d / 190 + 1) * 0.28),
@@ -258,7 +258,7 @@ const LEVELS = [
     safe: d => 0.5 * Math.sin(d / 430 + 2) * smooth(300, 900, d),
     rockStart: 700, gap: [175, 80, 170], clear: 47, logLen: 21, logPad: 8, gates: [2300, 4700, 7050, 9600], gateGap: 50, whirls: [1150, 4950, 5500, 7350, 10550],
     boosts: [[1500, 2100], [3600, 4500], [6200, 6900], [8800, 10300]], bridges: [2850, 7650],
-    logs: [2550, 3250, 5200, 5800, 7900, 8350], rings: [3350, 6000, 9050], ducks: [[420, 1], [5350, -1]],
+    logs: [2550, 3250, 5650, 6300, 7900, 8350], rings: [3350, 6000, 9050], ducks: [[420, 1], [5350, -1]],
     signs: [[100, '鹰嘴峡：河道更窄，水流更急'], [850, '漩涡会把艇吸过去——绕开，或冲刺甩脱'], [2020, '石门：从缺口穿过去'],
       [3420, '长急流，稳住方向！'], [4700, '连环漩涡'], [8620, '最后一段险滩！']] },
 ];
@@ -290,7 +290,9 @@ let rocks, logs, coins, rings, ducks, whirls;
 function buildLevel() {
   const rnd = mulberry32(LV.seed);
   rocks = []; logs = []; coins = []; rings = []; ducks = []; whirls = [];
-  for (const ld of LV.logs) logs.push({ d: ld, ph: rnd() * TAU, sp: 0.7 + rnd() * 0.4, x: 0, len: LV.logLen, lock: false });
+  // 漂木：玩家接近时才从上游“漂进来”，之后完全交给水流
+  for (const ld of LV.logs) logs.push({ d0: ld, d: ld, x: riverCx(ld) + (rnd() * 1.2 - 0.6) * riverW(ld), vx: 0, vd: 0, seed: logs.length + 1,
+    rot: (rnd() < 0.5 ? -1 : 1) * (0.25 + rnd() * 0.8), av: (rnd() - 0.5) * 0.5, len: LV.logLen, lock: false, on: false, fade: 1 });
   for (const rd of LV.rings) rings.push({ d: rd, x: riverCx(rd) - (safeX(rd) - riverCx(rd)) * 0.85, got: false });
   for (const wd of LV.whirls) {       // 漩涡放在安全航线的另一侧，航线只擦过它的外缘
     const s = safeX(wd) >= riverCx(wd) ? -1 : 1; let x = riverCx(wd) + s * riverW(wd) * 0.5;
@@ -306,8 +308,8 @@ function buildLevel() {
     }
     d += (inBoost ? LV.gap[2] : LV.gap[0] - LV.gap[1] * diff) * (0.7 + rnd() * 0.6);
   }
-  // 漂木、桥、救生圈、漩涡、石门附近不放散石
-  rocks = rocks.filter(r => !logs.some(l => Math.abs(l.d - r.d) < 70) && !BRIDGES.some(b => Math.abs(b - r.d) < 30 + r.r)
+  // 桥、救生圈、漩涡、石门附近不放散石
+  rocks = rocks.filter(r => !BRIDGES.some(b => Math.abs(b - r.d) < 30 + r.r)
     && !rings.some(g => Math.hypot(g.x - r.x, g.d - r.d) < r.r + 46) && !whirls.some(v => Math.hypot(v.x - r.x, v.d - r.d) < v.R * 0.62 + r.r)
     && !LV.gates.some(g => Math.abs(g - r.d) < 100));
   // 石门：一排礁石横在河上，只在安全航线处留一个缺口
@@ -358,7 +360,30 @@ let raft, cam, particles, wake, floaters, confetti, shake, flash, countdown, nex
 let muted = store.get('raft_muted', false);
 const input = { L: false, R: false, U: false, B: false, S: false };
 
-function placeLogs() { for (const l of logs) { l.x = riverCx(l.d) + (riverW(l.d) - l.len - LV.logPad) * Math.sin(LT * l.sp + l.ph); l.rot = 0.24 * Math.sin(LT * 0.55 + l.ph * 2); } }
+// 漂木顺流而下：速度跟着水流走，会被礁石和河岸挡开、慢慢打转，漂到石门前就搁浅
+function driftLogs(dt) {
+  for (const l of logs) {
+    if (!l.on) { if (l.fade < 1 || raft.d < l.d0 - 900) continue; l.on = true; flowAt(l.x, l.d); l.vx = FLOW.x; l.vd = FLOW.d; }
+    flowAt(l.x, l.d);
+    l.vx += (FLOW.x - l.vx) * 1.6 * dt; l.vd += (FLOW.d - l.vd) * 1.6 * dt; l.av += (FLOW.spin * 1.2 - l.av * 0.25) * dt;
+    l.x += l.vx * dt; l.d += l.vd * dt; l.rot += l.av * dt;
+    const ax = Math.cos(l.rot), ad = Math.sin(l.rot);
+    for (const k of [-0.85, 0, 0.85]) {                        // 用首、中、尾三个点和礁石、河岸碰撞
+      const px = l.x + ax * l.len * k, pd = l.d + ad * l.len * k;
+      for (const r of rocks) {
+        const dd = pd - r.d; if (dd < -40 || dd > 40) continue;
+        const dx = px - r.x, dist = Math.hypot(dx, dd), min = r.r + 8; if (dist >= min || !dist) continue;
+        const nx = dx / dist, nd = dd / dist, vn = l.vx * nx + l.vd * nd;
+        l.x += nx * (min - dist); l.d += nd * (min - dist);
+        if (vn < 0) { l.vx -= 1.2 * vn * nx; l.vd -= 1.2 * vn * nd; l.av += k * (nx * -ad + nd * ax) * -vn * 0.02; }
+      }
+      const off = px - riverCx(pd), lim = riverW(pd) - 7;
+      if (Math.abs(off) > lim) { const sg = Math.sign(off); l.x -= sg * (Math.abs(off) - lim); if (l.vx * sg > 0) l.vx *= -0.2; l.av += k * sg * ad * 0.6 * dt * 60 * 0.05; }
+    }
+    if (l.d > END + 300 || LV.gates.some(g => g > l.d0 && l.d > g - 70)) { l.on = false; l.fade = 0.99; }
+  }
+  for (const l of logs) if (!l.on && l.fade < 1 && l.fade > 0) l.fade = Math.max(0, l.fade - dt * 1.5);
+}
 // 随水漂的泡沫和落叶：按水流场移动，能看出水是怎么绕过礁石、卷进漩涡的
 let flecks = [];
 function newFleck(d) {
@@ -373,7 +398,6 @@ function reset() {
   particles = []; wake = []; floaters = []; confetti = []; flecks = [];
   for (let i = 0; i < 46; i++) flecks.push(newFleck(raft.d - 260 + Math.random() * 1000));
   shake = 0; flash = 0; LT = 0; nextCoin = 0; countdown = 0;
-  placeLogs();
 }
 
 // ---------- 声音 ----------
@@ -446,6 +470,9 @@ function collide(obj, nx, nd, lever = 0) {
     raft.av += lever / HULL_OFF * (nx * Math.cos(raft.a) - nd * Math.sin(raft.a)) * clamp(-vn / 45, 0.6, 5);     // 撞在艇首或艇尾会把艇身顶歪
   }
   raft.vx += nx * 90; raft.vd += nd * 90;
+  hurt(obj, nx, nd);
+}
+function hurt(obj, nx, nd) {
   if (obj.lock || raft.inv > 0 || state !== 'play') return;
   raft.av += (Math.random() - 0.5) * 1.5;
   obj.lock = true; obj.hit = true;
@@ -514,7 +541,7 @@ function update(dt) {
     if (after < before) { if (after > 0) sfx.tick(); else { state = 'play'; raft.vd = 60; sfx.go(); } }
     return;
   }
-  LT += dt; placeLogs();
+  LT += dt; driftLogs(dt);
 
   const playing = state === 'play';
   const L = playing && input.L, R = playing && input.R, U = playing && input.U, B = playing && input.B;
@@ -606,14 +633,22 @@ function update(dt) {
         collide(r, c.nx, c.nd, c.lever); if (state !== 'play') break;
       } else if (c.dist > min + 24) r.lock = false;
     }
-    // 漂木（胶囊体）
+    // 漂木：它是会动的。撞上去双方交换动量，相对速度够大才算真的撞伤
     if (state === 'play') for (const l of logs) {
-      if (Math.abs(l.d - raft.d) > 70) { l.lock = false; continue; }
+      if (!l.on || Math.abs(l.d - raft.d) > 80) { l.lock = false; continue; }
       const ux = Math.cos(l.rot) * l.len, ud = Math.sin(l.rot) * l.len, min = 8 + HULL_R - 1;
       const c = hullContact(l.x - ux, l.d - ud, l.x + ux, l.d + ud, min);
       if (c.pen > 0) {
-        raft.x += c.nx * c.pen; raft.d += c.nd * c.pen;
-        collide(l, c.nx, c.nd, c.lever); if (state !== 'play') break;
+        raft.x += c.nx * c.pen * 0.7; raft.d += c.nd * c.pen * 0.7; l.x -= c.nx * c.pen * 0.3; l.d -= c.nd * c.pen * 0.3;
+        const vn = (raft.vx - l.vx) * c.nx + (raft.vd - l.vd) * c.nd;
+        if (vn < 0) {
+          raft.vx -= 1.1 * vn * c.nx; raft.vd -= 1.1 * vn * c.nd; l.vx += 0.5 * vn * c.nx; l.vd += 0.5 * vn * c.nd;
+          const hx = raft.x - c.nx * HULL_R - l.x, hd = raft.d - c.nd * HULL_R - l.d;        // 撞在漂木一端会把它拨转
+          l.av += (hx * c.nd - hd * c.nx) * vn * 0.0009;
+          raft.av += c.lever / HULL_OFF * (c.nx * Math.cos(raft.a) - c.nd * Math.sin(raft.a)) * clamp(-vn / 45, 0.4, 5);
+          if (vn < -70) { raft.vx += c.nx * 50; raft.vd += c.nd * 50; hurt(l, c.nx, c.nd); if (state !== 'play') break; }
+          else if (bankSfxCd <= 0) { sfx.bank(); bankSfxCd = 0.5; splash(raft.x - c.nx * HULL_R, raft.d - c.nd * HULL_R, 4, 'rgba(255,255,255,.8)', 60); }
+        }
       } else if (c.dist > min + 24) l.lock = false;
     }
     // 星星与连击
@@ -772,21 +807,22 @@ function drawRock(r) {
 function drawLog(l) {
   ctx.save(); ctx.translate(l.x, Y(l.d)); ctx.rotate(-l.rot);
   const y = 0, lx = 0, x0 = -l.len - 6, x1 = l.len + 6;
-  ctx.fillStyle = 'rgba(0,18,26,.35)'; ctx.beginPath(); ctx.roundRect(x0 + SUN[0] * 0.6, y - 8 + SUN[1] * 0.6, x1 - x0, 16, 8); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 3; ctx.lineCap = 'round';      // 迎水面浪花
-  ctx.beginPath(); ctx.moveTo(x0 + 2, y + 9.5 + Math.sin(T * 5 + l.d) * 0.8); ctx.lineTo(x1 - 2, y + 9.5 + Math.cos(T * 5 + l.d) * 0.8); ctx.stroke();
+  ctx.globalAlpha = l.fade;
+  const cr = Math.cos(l.rot), sr = Math.sin(l.rot), ox = (SUN[0] * cr - SUN[1] * sr) * 0.6, oy = (SUN[0] * sr + SUN[1] * cr) * 0.6;      // 影子方向不随木头转
+  ctx.fillStyle = 'rgba(0,18,26,.35)'; ctx.beginPath(); ctx.roundRect(x0 + ox, y - 8 + oy, x1 - x0, 16, 8); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x0 - 2.5, y - 10.5 + Math.sin(T * 3 + l.seed) * 0.6, x1 - x0 + 5, 21, 10); ctx.stroke();     // 随波起伏的水纹
   const g = ctx.createLinearGradient(0, y - 8, 0, y + 8);
   g.addColorStop(0, '#5a3d24'); g.addColorStop(0.3, '#9a7148'); g.addColorStop(0.55, '#77532f'); g.addColorStop(1, '#2e1d0f');
   ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x0, y - 8, x1 - x0, 16, 7); ctx.fill();
   ctx.strokeStyle = 'rgba(38,22,10,.55)'; ctx.lineWidth = 1;                                // 树皮纹
   for (let k = 0; k < 6; k++) {
-    const yy = y - 5.5 + k * 2.2, a = x0 + 6 + hash(k, l.d | 0) * 14, b = x1 - 10 - hash(k, 3 + (l.d | 0)) * 14;
+    const yy = y - 5.5 + k * 2.2, a = x0 + 6 + hash(k, l.seed) * 14, b = x1 - 10 - hash(k, 3 + (l.seed)) * 14;
     ctx.beginPath(); ctx.moveTo(a, yy); ctx.lineTo((a + b) / 2, yy + (hash(k, 9) - 0.5) * 1.5); ctx.lineTo(b, yy); ctx.stroke();
   }
   ctx.fillStyle = '#4a321c'; ctx.beginPath(); ctx.roundRect(lx - 9, y - 12.5, 5, 6, 2); ctx.fill();   // 断枝
   ctx.fillStyle = '#c9a877'; oval(x1 - 1.5, y, 3, 6.8); ctx.fill();                          // 截面年轮
   ctx.strokeStyle = '#8a6540'; ctx.lineWidth = 0.9; oval(x1 - 1.5, y, 1.7, 4.2); ctx.stroke(); oval(x1 - 1.5, y, 0.6, 1.8); ctx.stroke();
-  ctx.restore();
+  ctx.globalAlpha = 1; ctx.restore();
 }
 
 const VEST = ['#e03131', '#f08c00', '#e03131', '#f08c00'], HELM = ['#f1f3f5', '#ffd43b', '#4dabf7', '#f1f3f5'];
@@ -1114,7 +1150,7 @@ function draw() {
     ctx.strokeStyle = hl; ctx.lineWidth = 7; circle(g.x, y, 10); ctx.stroke();
   }
   for (const r of rocks) if (r.d > d0 - 40 && r.d < d1 + 40) drawRock(r);
-  for (const l of logs) if (l.d > d0 && l.d < d1) drawLog(l);
+  for (const l of logs) if ((l.on || l.fade < 1 && l.fade > 0) && l.d > d0 - 40 && l.d < d1 + 40) drawLog(l);
   for (const k of ducks) if (k.d > d0 && k.d < d1 + 60 && !k.fly) drawDuck(k);
 
   drawRaft();
@@ -1325,7 +1361,7 @@ function showDead() {
   const pct = Math.max(0, Math.round(raft.d / END * 100));
   const nearWhirl = whirls.some(v => Math.hypot(v.x - raft.x, v.d - raft.d) < 110);
   const tip = nearWhirl ? '离漩涡越近吸力越大：提前往另一侧靠，被吸住就冲刺甩脱。'
-    : logs.some(l => Math.abs(l.d - raft.d) < 120) ? '漂木会来回漂动：按 ↓ 或松手减速，等它让开再冲过去。'
+    : logs.some(l => l.on && Math.hypot(l.x - raft.x, l.d - raft.d) < 120) ? '漂木跟着水流走：别从后面硬撞，看准空当从旁边超过去。'
     : '星星标出的就是安全航线。<br>橡皮艇有惯性，看到礁石要提前转向！';
   show(`<h1>橡皮艇漏气了…</h1><h2>${lvTitle(LV)} · 已漂流 ${pct}%</h2>
     <p>${isTouch ? tip.replace('按 ↓ 或松手', '松手') : tip}</p>`, [['再试一次', () => start()], ['选关', toMenu]]);
