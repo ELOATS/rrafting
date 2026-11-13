@@ -228,8 +228,9 @@ const DUCK_D = [[620, -1], [2130, 1], [4230, -1], [5460, 1], [8640, -1]];
 
 const SIGNS = [
   [120, isTouch ? '按住屏幕左侧 / 右侧  划桨转向' : '←  →  划桨转向'],
-  [470, isTouch ? '两侧同时按住  全力前进' : '同时按 ← →（或 ↑）全力前进'],
+  [470, isTouch ? '两侧同时按住  划桨前进' : '按 ↑ 划桨前进'],
   [820, '沿着星星走，避开礁石！'],
+  [1400, isTouch ? '按住中间按钮  冲刺' : '按住空格  冲刺（消耗体力）'],
   [3180, '前方急流！'],
   [4420, '救生圈可以补气'],
   [5080, '小心漂木，看准时机！'],
@@ -287,13 +288,13 @@ let state = 'menu';            // menu | ready | play | pause | win | dead
 let T = 0, LT = 0;             // 动画时钟 / 关卡时钟
 let raft, cam, particles, wake, floaters, confetti, shake, flash, countdown, nextCoin;
 let muted = store.get('raft_muted', false);
-const input = { L: false, R: false, U: false, B: false };
+const input = { L: false, R: false, U: false, B: false, S: false };
 
 function placeLogs() { for (const l of logs) l.x = riverCx(l.d) + (riverW(l.d) - l.len - 14) * Math.sin(LT * l.sp + l.ph); }
 function reset() {
   buildLevel();
   raft = { x: W / 2, d: -90, vx: 0, vd: 0, a: 0, av: 0, hp: 3, inv: 0, coins: 0, time: 0, score: 0, combo: 0, bestCombo: 0,
-           phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0 };
+           phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0, st: 0, stam: 1, tired: false, sprint: false };
   cam = { d: raft.d };
   particles = []; wake = []; floaters = []; confetti = []; shake = 0; flash = 0; LT = 0; nextCoin = 0; countdown = 0;
   placeLogs();
@@ -376,11 +377,12 @@ function collide(obj, nx, nd) {
   if (raft.hp <= 0) { state = 'dead'; sfx.dead(); setTimeout(showDead, 1300); }
 }
 
-const STROKE_RATE = 1.6, POWER = 0.45, PADDLE_F = 172, STEER_A = 0.95, STEER_K = 22, KF = 1.1, KS = 3.5, KAV = 7;
+const STROKE_RATE = 1.6, POWER = 0.45, PADDLE_F = 172, STEER_A = 0.6, STEER_K = 17, DRAW_F = 130, KF = 1.1, KS = 3.5, KAV = 6;
+let strokeMul = 1;
 function strokeSide(key, active, dir, dt, s) {
   let ph = raft[key];
   if (ph === 0) { if (!active) return 0; raft[key === 'phL' ? 'dirL' : 'dirR'] = dir; ph = 1e-4; }
-  const before = ph; ph += STROKE_RATE * dt;
+  const before = ph; ph += STROKE_RATE * strokeMul * dt;
   if (before < 0.04 && ph >= 0.04) {           // 入水
     const c = Math.cos(raft.a), si = Math.sin(raft.a), dd = raft[key === 'phL' ? 'dirL' : 'dirR'];
     for (const ly of [-16 * dd, -2 * dd]) splash(raft.x + s * 25 * c - ly * si * -1, raft.d - s * 25 * si - ly * c, 3, 'rgba(255,255,255,.85)', 50);
@@ -416,13 +418,19 @@ function update(dt) {
 
   const playing = state === 'play';
   const L = playing && input.L, R = playing && input.R, U = playing && input.U, B = playing && input.B;
-  const fwd = U || (L && R), back = B && !fwd, steer = (R ? 1 : 0) - (L ? 1 : 0);
+  // 冲刺：队员加快桨频全力划，消耗体力；耗尽后要缓一会儿
+  if (raft.stam <= 0) raft.tired = true; else if (raft.stam > 0.3) raft.tired = false;
+  const sprint = playing && input.S && !raft.tired;
+  raft.stam = clamp(raft.stam + (sprint ? -dt / 3 : dt / 5), 0, 1); raft.sprint = sprint; strokeMul = sprint ? 1.5 : 1;
+  const fwd = U || (L && R) || sprint, back = B && !fwd, steer = (R ? 1 : 0) - (L ? 1 : 0);
+  // 转向是渐进的：轻点微调，按住才逐渐打到最大角度
+  const rate = (steer ? 2 : 2.6) * dt; raft.st += clamp((playing ? steer : 0) - raft.st, -rate, rate);
   // 按住 ← / → 艇头转向那一侧，松开后队员自动把艇头划正
   const slope = riverSlope(raft.d), aTan = Math.atan(slope), boost = boostAt(raft.d);
-  const target = aTan + steer * STEER_A, err = target - raft.a;
+  const target = aTan + raft.st * STEER_A, err = target - raft.a;
   const any = fwd || back || steer !== 0, keyL = any, keyR = any, fix = playing && !any;
-  const pL = fwd || back || R ? 1 : 0.6, pR = fwd || back || L ? 1 : 0.6;        // 转向时外侧全力、内侧轻划
-  const wasIdle = raft.phL === 0 && raft.phR === 0, dir = back ? -0.7 : 1;
+  const pL = fwd || back || R ? 1 : 0.8, pR = fwd || back || L ? 1 : 0.8;        // 转向时外侧全力、内侧轻划
+  const wasIdle = raft.phL === 0 && raft.phR === 0, dir = back ? -0.7 : sprint ? 1.6 : 1;
   const fL = strokeSide('phL', keyL || (fix && err > 0.22), dir, dt, -1) * (keyL ? pL : 0);
   const fR = strokeSide('phR', keyR || (fix && err < -0.22), dir, dt, 1) * (keyR ? pR : 0);
   if ((raft.phL > 0 || raft.phR > 0) && strokeSfxCd <= 0 && (wasIdle || raft.phL < 0.03 && raft.phL > 0 || raft.phR < 0.03 && raft.phR > 0)) { sfx.stroke(); strokeSfxCd = 0.3; }
@@ -438,7 +446,7 @@ function update(dt) {
   const rx = raft.vx - FLOW.x * fl, rd = raft.vd - FLOW.d * fl;
   const rf = rx * sa + rd * ca, rs = rx * ca - rd * sa, thrust = fL + fR;
   raft.rel = rf;
-  raft.vx += ((thrust - KF * rf) * sa - KS * rs * ca) * dt;
+  raft.vx += ((thrust - KF * rf) * sa - KS * rs * ca + (steer ? DRAW_F * raft.st : 0)) * dt;      // 转向时外侧队员向外拉桨，带着艇横移
   raft.vd += ((thrust - KF * rf) * ca + KS * rs * sa) * dt;
   const d0 = raft.d;
   raft.x += raft.vx * dt; raft.d += raft.vd * dt;
@@ -1027,6 +1035,12 @@ function drawHUD() {
       ctx.stroke();
     }
   }
+  { // 体力条
+    const x0 = 14, y0 = 86, w = 62, col = raft.tired ? '#ff8787' : raft.stam < 0.35 ? '#ffd43b' : '#8ce99a';
+    ctx.fillStyle = 'rgba(6,30,40,.55)'; ctx.beginPath(); ctx.roundRect(x0, y0, w, 7, 3.5); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(x0 + 1, y0 + 1, Math.max(5, (w - 2) * raft.stam), 5, 2.5); ctx.fill();
+    outlined(raft.sprint ? '冲刺！' : raft.tired ? '喘口气…' : '体力', x0 + w + 6, y0 + 4, 11, col, 'left');
+  }
   const bx = W - 16, by0 = 96, by1 = H - 150, p = clamp(raft.d / END, 0, 1);
   ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(6,30,40,.55)'; ctx.lineWidth = 8;
   ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
@@ -1037,6 +1051,12 @@ function drawHUD() {
   outlined('终', bx, by0 - 15, 13, '#fff');
   if (boostAt(raft.d) > 0.5 && state === 'play') outlined('急  流', W / 2, 84, 17, '#d8f3f5');
   if (isTouch && (state === 'play' || state === 'ready')) {
+    const sx = W / 2, sy = H - 66;
+    ctx.fillStyle = input.S && !raft.tired ? 'rgba(255,212,59,.5)' : 'rgba(255,255,255,.16)'; circle(sx, sy, 36); ctx.fill();
+    ctx.strokeStyle = raft.tired ? 'rgba(255,135,135,.9)' : 'rgba(255,255,255,.85)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(sx, sy, 36, -Math.PI / 2, -Math.PI / 2 + TAU * raft.stam); ctx.stroke();
+    ctx.lineWidth = 4; ctx.lineJoin = 'round';
+    for (const oy of [-9, 3]) { ctx.beginPath(); ctx.moveTo(sx - 12, sy + oy + 8); ctx.lineTo(sx, sy + oy - 4); ctx.lineTo(sx + 12, sy + oy + 8); ctx.stroke(); }
     for (const [s, on] of [[-1, input.L], [1, input.R]]) {
       const x = W / 2 + s * (W / 2 - 62), y = H - 70;
       ctx.fillStyle = on ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.16)';
@@ -1061,8 +1081,8 @@ function showMenu() {
   state = 'menu';
   const b = store.get('raft_l1_best', null);
   show(`<h1>橡皮艇漂流</h1><h2>第一关 · 青溪谷</h2>
-    <p>${isTouch ? '按住屏幕<b>左侧 / 右侧</b>划桨转向<br>两侧<b>同时按住</b>全力前进'
-      : '<kbd>←</kbd> <kbd>→</kbd> 划桨转向　<kbd>↑</kbd> 全力前进<br><kbd>↓</kbd> 倒划减速　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音'}</p>
+    <p>${isTouch ? '按住屏幕<b>左侧 / 右侧</b>划桨转向<br>两侧<b>同时按住</b>前进　<b>中间按钮</b>冲刺'
+      : '<kbd>←</kbd> <kbd>→</kbd> 划桨转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划<br><kbd>空格</kbd> 冲刺（耗体力）　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音'}</p>
     <p>松开按键，艇头会自动回正。<br>沿着星星走，避开礁石与漂木。<br>橡皮艇只经得起 3 次碰撞！</p>
     ${b ? `<p class="small">最佳：${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒</p>` : ''}`, '出发！', () => start());
 }
@@ -1099,7 +1119,7 @@ function togglePause() {
 }
 
 // ---------- 输入 ----------
-const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', ArrowUp: 'U', w: 'U', W: 'U', ArrowDown: 'B', s: 'B', S: 'B' };
+const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', ArrowUp: 'U', w: 'U', W: 'U', ArrowDown: 'B', s: 'B', S: 'B', Shift: 'S' };
 const pointers = new Map();
 window.addEventListener('keydown', e => {
   if (KEYS[e.key]) { input[KEYS[e.key]] = true; e.preventDefault(); return; }
@@ -1110,19 +1130,19 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'Enter' || e.key === ' ') {
     const b = document.getElementById('go');
     if (b && !overlay.classList.contains('hidden')) b.click();
-    else if (e.key === ' ') input.U = true;
+    else if (e.key === ' ') input.S = true;
     e.preventDefault();
   }
 });
-window.addEventListener('keyup', e => { if (KEYS[e.key]) input[KEYS[e.key]] = false; if (e.key === ' ') input.U = false; });
-function autoPause() { input.L = input.R = input.U = input.B = false; pointers.clear(); if (state === 'play') togglePause(); }
+window.addEventListener('keyup', e => { if (KEYS[e.key]) input[KEYS[e.key]] = false; if (e.key === ' ') input.S = false; });
+function autoPause() { input.L = input.R = input.U = input.B = input.S = false; pointers.clear(); if (state === 'play') togglePause(); }
 window.addEventListener('blur', autoPause);
 document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
 
 function syncPointers() {
-  let L = false, R = false;
-  for (const side of pointers.values()) { if (side < 0) L = true; else R = true; }
-  input.L = L; input.R = R;
+  let L = false, R = false, S = false;
+  for (const side of pointers.values()) { if (side < 0) L = true; else if (side > 0) R = true; else S = true; }
+  input.L = L; input.R = R; input.S = S;
 }
 function logical(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
 canvas.addEventListener('pointerdown', e => {
@@ -1132,9 +1152,10 @@ canvas.addEventListener('pointerdown', e => {
     if (Math.hypot(x - BTN.pause[0], y - BTN.pause[1]) < BTN.r + 6) { togglePause(); return; }
     if (Math.hypot(x - BTN.mute[0], y - BTN.mute[1]) < BTN.r + 6) { setMuted(!muted); return; }
   }
-  pointers.set(e.pointerId, x < W / 2 ? -1 : 1); syncPointers(); e.preventDefault();
+  const onSprint = isTouch && Math.hypot(x - W / 2, y - (H - 66)) < 44;
+  pointers.set(e.pointerId, onSprint ? 0 : x < W / 2 ? -1 : 1); syncPointers(); e.preventDefault();
 });
-canvas.addEventListener('pointermove', e => { if (pointers.has(e.pointerId)) { pointers.set(e.pointerId, logical(e)[0] < W / 2 ? -1 : 1); syncPointers(); } });
+canvas.addEventListener('pointermove', e => { if (pointers.get(e.pointerId)) { pointers.set(e.pointerId, logical(e)[0] < W / 2 ? -1 : 1); syncPointers(); } });
 for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, e => { if (pointers.delete(e.pointerId)) syncPointers(); });
 document.addEventListener('contextmenu', e => e.preventDefault());
 
