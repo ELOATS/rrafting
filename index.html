@@ -376,7 +376,7 @@ function collide(obj, nx, nd) {
   if (raft.hp <= 0) { state = 'dead'; sfx.dead(); setTimeout(showDead, 1300); }
 }
 
-const STROKE_RATE = 1.6, POWER = 0.45, PADDLE_F = 300, PADDLE_T = 0.105, KF = 1.1, KS = 2.3, KAV = 4;
+const STROKE_RATE = 1.6, POWER = 0.45, PADDLE_F = 172, STEER_A = 0.95, STEER_K = 22, KF = 1.1, KS = 3.5, KAV = 7;
 function strokeSide(key, active, dir, dt, s) {
   let ph = raft[key];
   if (ph === 0) { if (!active) return 0; raft[key === 'phL' ? 'dirL' : 'dirR'] = dir; ph = 1e-4; }
@@ -387,7 +387,8 @@ function strokeSide(key, active, dir, dt, s) {
   }
   if (ph >= 1) { ph = active ? ph - 1 : 0; if (active) raft[key === 'phL' ? 'dirL' : 'dirR'] = dir; }
   raft[key] = ph;
-  return ph > 0 && ph < POWER ? PADDLE_F * Math.sin(Math.PI * ph / POWER) * raft[key === 'phL' ? 'dirL' : 'dirR'] : 0;
+  // 推力：按住就有，随每一桨起伏；松开立刻停
+  return PADDLE_F * (0.3 + 0.7 * (ph > 0 && ph < POWER ? Math.sin(Math.PI * ph / POWER) : 0)) * dir;
 }
 
 let bankSfxCd = 0, strokeSfxCd = 0;
@@ -415,21 +416,20 @@ function update(dt) {
 
   const playing = state === 'play';
   const L = playing && input.L, R = playing && input.R, U = playing && input.U, B = playing && input.B;
-  const fwd = U || (L && R), back = B && !fwd;
-  // 按 → 是左侧队员划桨（艇向右转），按 ← 是右侧队员划桨
-  const wasIdle = raft.phL === 0 && raft.phR === 0;
-  const fL = strokeSide('phL', fwd || back || R, back ? -0.7 : 1, dt, -1);
-  const fR = strokeSide('phR', fwd || back || L, back ? -0.7 : 1, dt, 1);
+  const fwd = U || (L && R), back = B && !fwd, steer = (R ? 1 : 0) - (L ? 1 : 0);
+  // 按住 ← / → 艇头转向那一侧，松开后队员自动把艇头划正
+  const slope = riverSlope(raft.d), aTan = Math.atan(slope), boost = boostAt(raft.d);
+  const target = aTan + steer * STEER_A, err = target - raft.a;
+  const any = fwd || back || steer !== 0, keyL = any, keyR = any, fix = playing && !any;
+  const pL = fwd || back || R ? 1 : 0.6, pR = fwd || back || L ? 1 : 0.6;        // 转向时外侧全力、内侧轻划
+  const wasIdle = raft.phL === 0 && raft.phR === 0, dir = back ? -0.7 : 1;
+  const fL = strokeSide('phL', keyL || (fix && err > 0.22), dir, dt, -1) * (keyL ? pL : 0);
+  const fR = strokeSide('phR', keyR || (fix && err < -0.22), dir, dt, 1) * (keyR ? pR : 0);
   if ((raft.phL > 0 || raft.phR > 0) && strokeSfxCd <= 0 && (wasIdle || raft.phL < 0.03 && raft.phL > 0 || raft.phR < 0.03 && raft.phR > 0)) { sfx.stroke(); strokeSfxCd = 0.3; }
 
-  // 转向：桨的力矩 + 水流把艇头带正 + 急流里的颠簸
-  const slope = riverSlope(raft.d), aTan = Math.atan(slope), boost = boostAt(raft.d);
-  let torque = (fL - fR) * PADDLE_T + 0.7 * (aTan - raft.a);
-  const over = Math.abs(raft.a - aTan) - 1.2;
-  if (over > 0 && state !== 'dead') torque -= Math.sign(raft.a - aTan) * over * 40;
-  if (boost > 0) torque += Math.sin(LT * 5.3) * Math.sin(LT * 2.1 + 1) * 2.2 * boost;
+  let torque = state === 'dead' ? 6 : err * STEER_K;
+  if (boost > 0) torque += Math.sin(LT * 5.3) * Math.sin(LT * 2.1 + 1) * 1.5 * boost;      // 急流里的颠簸
   raft.av += (torque - KAV * raft.av) * dt;
-  if (state === 'dead') raft.av += 6 * dt;
   raft.a += raft.av * dt;
 
   // 受力：水的阻力（横向比纵向大）+ 划桨推力
@@ -447,7 +447,7 @@ function update(dt) {
 
   // 急流里的驻波：冲过浪尖时颠一下
   if (boost > 0.4 && Math.floor(raft.d / WAVE_GAP) !== Math.floor(d0 / WAVE_GAP)) {
-    raft.bump = 1; raft.vd *= 0.985; raft.av += (Math.random() - 0.5) * 0.9 * boost;
+    raft.bump = 1; raft.vd *= 0.985; raft.av += (Math.random() - 0.5) * 0.5 * boost;
     splash(raft.x + sa * 20, raft.d + ca * 20, 7, 'rgba(255,255,255,.9)', 110);
     if (playing) sfx.wave();
   }
@@ -782,7 +782,7 @@ function drawTerrain(d0, d1) {
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, CH + 2); ctx.clip();
   fillPattern(PAT.grass, 0, camD);
   for (let i = Math.floor(d0 / 110) - 1; i <= d1 / 110 + 1; i++) {
-    ctx.fillStyle = hash(i, 1) > 0.5 ? 'rgba(24,52,22,.2)' : 'rgba(190,200,110,.13)';
+    ctx.fillStyle = hash(i, 1) > 0.5 ? 'rgba(24,52,22,.1)' : 'rgba(190,200,110,.07)';
     oval(hash(i, 2) * W, Y(i * 110 + hash(i, 3) * 110), 60 + hash(i, 4) * 70, 34 + hash(i, 5) * 30, hash(i, 6) * 3); ctx.fill();
   }
   const river = riverPath(d0, d1), mid = new Path2D();
@@ -974,12 +974,7 @@ function draw() {
   }
   ctx.restore();
 
-  // 云影 + 暗角
-  ctx.fillStyle = 'rgba(6,24,20,.1)';
-  for (let i = 0; i < 3; i++) {
-    const cx = ((T * (9 + i * 4) + i * 260) % (W + 500)) - 250, per = H + 400, cy = (((camD * 0.25 + i * 370 + T * 5) % per) + per) % per - 200;
-    oval(cx, H - cy, 170 + i * 30, 90 + i * 16, 0.3); ctx.fill();
-  }
+  // 暗角
   if (!vignette || vignette.h !== H) { vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
     vignette.addColorStop(0, 'rgba(0,14,20,0)'); vignette.addColorStop(1, 'rgba(0,14,20,.36)'); vignette.h = H; }
   ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
@@ -1068,7 +1063,7 @@ function showMenu() {
   show(`<h1>橡皮艇漂流</h1><h2>第一关 · 青溪谷</h2>
     <p>${isTouch ? '按住屏幕<b>左侧 / 右侧</b>划桨转向<br>两侧<b>同时按住</b>全力前进'
       : '<kbd>←</kbd> <kbd>→</kbd> 划桨转向　<kbd>↑</kbd> 全力前进<br><kbd>↓</kbd> 倒划减速　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音'}</p>
-    <p>顺流而下，沿着星星走，避开礁石与漂木。<br>橡皮艇只经得起 3 次碰撞！</p>
+    <p>松开按键，艇头会自动回正。<br>沿着星星走，避开礁石与漂木。<br>橡皮艇只经得起 3 次碰撞！</p>
     ${b ? `<p class="small">最佳：${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒</p>` : ''}`, '出发！', () => start());
 }
 function start(skipCountdown) {
