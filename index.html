@@ -46,6 +46,9 @@
   .lv { display: flex; flex-direction: column; gap: 2px; text-align: left; margin: 8px 0; padding: 10px 14px; border-radius: 12px; cursor: pointer;
         background: rgba(255,255,255,.07); border: 1.5px solid rgba(255,255,255,.14); }
   .lv b { font-size: 16px; } .lv span { font-size: 12px; color: #9fd0dc; }
+  .lv.locked { cursor: default; opacity: .55; }
+  .lock { display: inline-block; position: relative; width: 11px; height: 9px; margin-right: 7px; border-radius: 2px; background: #cfe6ea; }
+  .lock::before { content: ''; position: absolute; left: 1.5px; top: -6px; width: 4px; height: 6px; border: 2px solid #cfe6ea; border-bottom: 0; border-radius: 4px 4px 0 0; }
   .lv.sel { background: rgba(255,210,63,.16); border-color: #ffd23f; }
   button:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8600b; }
 </style>
@@ -1155,18 +1158,21 @@ function show(html, buttons) {
 const starsHtml = n => `<div class="stars">${[0, 1, 2].map(i => `<span class="${i < n ? 'on' : 'off'}" style="--i:${i}">★</span>`).join('')}</div>`;
 const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ',');
 
+// 通关上一关才解锁下一关
+const unlocked = i => i <= 0 || !!store.get(bestKey(LEVELS[i - 1]), null);
 function showMenu() {
   state = 'menu';
   const cards = LEVELS.map((lv, i) => {
     const b = store.get(bestKey(lv), null);
+    if (!unlocked(i)) return `<div class="lv locked"><b><i class="lock"></i>${lvTitle(lv)}</b><span>通关「${LEVELS[i - 1].name}」后解锁</span></div>`;
     return `<div class="lv${lv === LV ? ' sel' : ''}" data-lv="${i}"><b>${lvTitle(lv)}</b><span>${b ? `${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分` : lv.intro}</span></div>`;
   }).join('');
   show(`<h1>橡皮艇漂流</h1><h2>选择关卡</h2>${cards}
     <p class="small">${isTouch ? '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺'
       : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br><kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
     <p class="small">橡皮艇只经得起 3 次碰撞！</p>`, [['出发！', () => start()]]);
-  panel.querySelectorAll('.lv').forEach(el => { el.onclick = e => {
-    e.stopPropagation(); const i = +el.dataset.lv;
+  panel.querySelectorAll('.lv[data-lv]').forEach(el => { el.onclick = e => {
+    e.stopPropagation(); const i = +el.dataset.lv; if (!unlocked(i)) return;
     if (LEVELS[i] !== LV) { setLevel(i); store.set('raft_level', i); reset(); }
     showMenu();
   }; });
@@ -1193,7 +1199,7 @@ function showWin() {
     <p class="small">${isNew ? '<span class="new">新纪录！</span>' : old ? `最高 ${fmt(best.score)} 分` : ''}</p>
     <div class="stats"><div><b>${r.time.toFixed(1)}</b>用时(秒)</div><div><b>${raft.coins}/${total}</b>星星</div><div><b>×${raft.bestCombo}</b>最高连击</div></div>
     <div class="goals">${mark(true)} 抵达终点<br>${mark(r.gotCoins)} 收集 80% 以上的星星<br>${mark(r.clean)} 全程零碰撞</div>
-    <p class="small">${r.fast ? `⚡ ${PAR_TIME} 秒内完成　` : ''}${hasNext ? '' : '你已通过全部关卡！'}</p>`,
+    <p class="small">${r.fast ? `⚡ ${PAR_TIME} 秒内完成　` : ''}${hasNext ? (old ? '' : `已解锁${lvTitle(LEVELS[next])}`) : '你已通过全部关卡！'}</p>`,
     hasNext ? [[`下一关：${LEVELS[next].name}`, () => start(false, next)], again, menu] : [again, menu]);
 }
 function showDead() {
@@ -1274,7 +1280,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-setLevel(store.get('raft_level', 0));
+{ let lv = clamp(store.get('raft_level', 0) | 0, 0, LEVELS.length - 1); while (!unlocked(lv)) lv--; setLevel(lv); }
 reset();
 showMenu();
 requestAnimationFrame(frame);
