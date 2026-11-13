@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#14261a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d6f86'/%3E%3Crect x='10' y='5' width='12' height='22' rx='6' fill='%23f76707'/%3E%3Crect x='13' y='9' width='6' height='14' rx='3' fill='%232f3b42'/%3E%3C/svg%3E">
 <title>橡皮艇漂流</title>
 <style>
   html, body { margin: 0; height: 100%; background: #14261a; overflow: hidden; }
@@ -15,7 +16,7 @@
   #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
              background: rgba(8, 28, 36, .5); color: #fff; text-align: center; }
   #overlay.hidden { display: none; }
-  #panel { width: 80%; max-width: 340px; padding: 22px 20px 20px; border-radius: 18px;
+  #panel { width: 80%; max-width: 340px; max-height: 94%; overflow-y: auto; box-sizing: border-box; padding: 22px 20px 20px; border-radius: 18px;
            background: rgba(14, 44, 58, .93); border: 1.5px solid rgba(255,255,255,.22);
            animation: rise .3s ease-out; }
   @keyframes rise { from { transform: translateY(18px) scale(.96); opacity: 0; } }
@@ -83,7 +84,7 @@ const TAU = Math.PI * 2;
 
 const chunks = new Map();     // 预渲染的地形分块
 // 设置：音量、转向灵敏度、画质、震动
-const cfg = { vol: 1, sens: 1, quality: 1, shake: true };
+const cfg = { vol: 1, sens: 1, quality: 1, qLock: false, music: true, shake: !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('raft_settings')) || {}); } catch (e) {}
 const saveCfg = () => { try { localStorage.setItem('raft_settings', JSON.stringify(cfg)); } catch (e) {} };
 const SENS = [{ rate: 0.72, a: 0.5 }, { rate: 1, a: 0.6 }, { rate: 1.35, a: 0.72 }];
@@ -120,6 +121,7 @@ const store = {
 
 // ---------- 程序化贴图 ----------
 const TS = 256;
+const SUN = [6, 9];             // 影子偏移（阳光来自左上）
 function makeFbm(p0, oct, seed) {            // 可平铺的分形噪声，输入 0..1
   const rnd = mulberry32(seed), grids = [];
   for (let o = 0; o < oct; o++) { const p = p0 << o, g = new Float32Array(p * p); for (let i = 0; i < g.length; i++) g[i] = rnd(); grids.push([p, g]); }
@@ -186,6 +188,15 @@ const TEX = (() => {
       });
     }
   });
+  const autumn = makeTex((u, v) => {      // 秋天的草地：发黄，落满红叶
+    const t = clamp(f1(u, v) * 1.5 - 0.25 + (f2(u, v) - 0.5) * 0.45, 0, 1);
+    return [lerp(84, 156, t), lerp(80, 136, t), lerp(36, 60, t)];
+  }, g => {
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = ['rgba(204,96,28,.75)', 'rgba(172,48,30,.7)', 'rgba(226,170,48,.75)', 'rgba(60,70,30,.4)'][i & 3];
+      g.beginPath(); g.ellipse(rnd() * TS, rnd() * TS, 1 + rnd() * 1.6, 0.7 + rnd(), rnd() * 3, 0, TAU); g.fill();
+    }
+  });
   const cliff = makeTex((u, v) => {      // 峡谷岩面：带层理的褐灰色岩石
     const n = f1(u, v), t = clamp(n * 1.2 - 0.1 + Math.sin((v * 9 + n * 2.2) * TAU) * 0.1 + (f2(u, v) - 0.5) * 0.35, 0, 1);
     return [lerp(84, 164, t), lerp(72, 142, t), lerp(60, 112, t)];
@@ -197,7 +208,7 @@ const TEX = (() => {
     for (let i = 0; i < 260; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(76,104,52,.3)' : 'rgba(200,186,160,.25)'; g.beginPath(); g.arc(rnd() * TS, rnd() * TS, 1 + rnd() * 2.5, 0, TAU); g.fill(); }
   });
   const ridge = (f, pw) => (u, v) => { const r = 1 - Math.abs(2 * f(u, v) - 1); return [255, 255, 255, Math.pow(r, pw) * 255]; };
-  return { grass, cliff, gravel, bed, ripA: makeTex(ridge(f3, 7)), ripB: makeTex(ridge(f4, 26)), foam: makeTex((u, v) => {
+  return { grass, autumn, cliff, gravel, bed, ripA: makeTex(ridge(f3, 7)), ripB: makeTex(ridge(f4, 26)), foam: makeTex((u, v) => {
     const a = clamp((f5(u, v) + (f2(u, v) - 0.5) * 0.6 - 0.5) * 6, 0, 1); return [255, 255, 255, a * 255]; }) };
 })();
 const PAT = {};
@@ -206,10 +217,11 @@ for (const k in TEX) PAT[k] = ctx.createPattern(TEX[k], 'repeat');
 // 树冠贴图：由许多受光的叶团叠成
 const TREES = (() => {
   const out = [], rnd = mulberry32(7), L = [-0.62, -0.78];
-  const pal = [[[22, 58, 26], [58, 118, 44], [150, 190, 92]], [[30, 62, 22], [84, 128, 42], [176, 198, 96]], [[16, 48, 30], [40, 98, 52], [120, 170, 100]]];
-  for (let v = 0; v < 5; v++) {
+  const pal = [[[22, 58, 26], [58, 118, 44], [150, 190, 92]], [[30, 62, 22], [84, 128, 42], [176, 198, 96]], [[16, 48, 30], [40, 98, 52], [120, 170, 100]],
+    [[112, 46, 14], [198, 98, 24], [246, 172, 62]], [[98, 24, 18], [180, 50, 30], [234, 112, 62]], [[122, 86, 16], [206, 162, 38], [248, 216, 98]]];      // 后三组是秋色
+  for (let v = 0; v < 9; v++) {
     const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.translate(48, 48);
-    const p = pal[v % 3];
+    const p = pal[v < 5 ? v % 3 : 3 + (v - 5) % 3];
     if (v === 4) {      // 针叶树：放射状
       for (let ring = 0; ring < 4; ring++) {
         const R = 32 - ring * 8, n = 13 - ring * 2, t = ring / 3;
@@ -238,6 +250,7 @@ const TREES = (() => {
 // ---------- 关卡 ----------
 // 坐标：x 横向，d 为顺流距离（屏幕向上）。
 const RAFT_R = 14, WAVE_GAP = 46, NUM = '一二三四五';
+const C = 48, D = 50, E = 52, F = 41, G = 43, A = 45, Bb = 46;      // 配乐用的和弦根音（MIDI）
 const tSteer = isTouch ? '按住屏幕左侧 / 右侧  划桨转向' : '←  →  划桨转向';
 const tSprint = isTouch ? '按住中间按钮  冲刺' : '按住空格  冲刺（消耗体力）';
 const LEVELS = [
@@ -246,7 +259,7 @@ const LEVELS = [
     cx: d => W / 2 + 60 * smooth(200, 900, d) * (Math.sin(d / 610) * 0.7 + Math.sin(d / 233 + 2) * 0.3),
     w: d => 118 + 14 * Math.sin(d / 400) - 14 * smooth(3000, 3600, d) * (1 - smooth(4600, 5200, d)),
     safe: d => 0.55 * Math.sin(d / 520 + 1) * smooth(300, 1000, d),
-    rockStart: 1000, gap: [210, 95, 190], clear: 50, logLen: 26, logPad: 14, gates: [], gateGap: 52, whirls: [],
+    rockStart: 1000, gap: [210, 95, 190], clear: 50, logLen: 26, logPad: 14, gates: [], gateGap: 52, whirls: [], drops: [], music: [[C, 0], [A, 1], [F, 0], [G, 0]],
     boosts: [[3300, 3900], [5900, 6400], [7700, 8500]], bridges: [2695, 6595],
     logs: [5250, 5650, 6700, 7300], rings: [4570, 7450], ducks: [[620, -1], [2130, 1], [4230, -1], [5460, 1], [8640, -1]],
     signs: [[120, tSteer], [470, isTouch ? '两侧同时按住  划桨前进' : '按 ↑ 划桨前进'], [820, '沿着星星走，避开礁石！'], [1400, tSprint],
@@ -256,22 +269,36 @@ const LEVELS = [
     cx: d => W / 2 + 78 * smooth(200, 800, d) * (Math.sin(d / 470) * 0.72 + Math.sin(d / 190 + 1) * 0.28),
     w: d => 104 + 12 * Math.sin(d / 330 + 1) - 10 * smooth(6000, 6500, d) * (1 - smooth(8200, 8700, d)),
     safe: d => 0.5 * Math.sin(d / 430 + 2) * smooth(300, 900, d),
-    rockStart: 700, gap: [175, 80, 170], clear: 47, logLen: 21, logPad: 8, gates: [2300, 4700, 7050, 9600], gateGap: 50, whirls: [1150, 4950, 5500, 7350, 10550],
+    rockStart: 700, gap: [175, 80, 170], clear: 47, logLen: 21, logPad: 8, gates: [2300, 4700, 7050, 9600], gateGap: 50, whirls: [1150, 4950, 5500, 7350, 10550], drops: [], music: [[A, 1], [F, 0], [C, 0], [E, 1]],
     boosts: [[1500, 2100], [3600, 4500], [6200, 6900], [8800, 10300]], bridges: [2850, 7650],
     logs: [2550, 3250, 5650, 6300, 7900, 8350], rings: [3350, 6000, 9050], ducks: [[420, 1], [5350, -1]],
     signs: [[100, '鹰嘴峡：河道更窄，水流更急'], [850, '漩涡会把艇吸过去——绕开，或冲刺甩脱'], [2020, '石门：从缺口穿过去'],
       [3420, '长急流，稳住方向！'], [4700, '连环漩涡'], [8620, '最后一段险滩！']] },
+  { id: 3, name: '落霞滩', theme: 'autumn', seed: 55120803, end: 12000, flow: 104, par: 62, w0: 122,
+    intro: '夕阳下的大水：一级级跌水，要对准水舌冲下去。',
+    cx: d => W / 2 + 68 * smooth(200, 800, d) * (Math.sin(d / 540 + 0.5) * 0.65 + Math.sin(d / 210 + 3) * 0.35),
+    w: d => 122 + 12 * Math.sin(d / 360 + 2),
+    safe: d => 0.55 * Math.sin(d / 470 + 4) * smooth(300, 900, d),
+    rockStart: 800, gap: [165, 80, 160], clear: 48, logLen: 24, logPad: 10, gates: [4100, 8300], gateGap: 52, whirls: [2200, 6300, 6800, 10100],
+    drops: [1300, 3000, 5200, 7400, 9300, 10900], music: [[D, 1], [Bb, 0], [F, 0], [C, 0]],
+    boosts: [[1700, 2500], [3400, 3900], [5600, 6100], [7700, 8100], [9600, 10000], [11100, 11700]], bridges: [4800, 9000],
+    logs: [2700, 4500, 7000, 8450, 10300], rings: [3700, 5900, 8900], ducks: [[500, -1], [5450, 1]],
+    signs: [[100, '落霞滩：水大浪急'], [880, '前方跌水：对准中间光滑的 V 形水舌'], [2720, '两侧的白水是回流，被卷住就全力划出去'],
+      [6050, '连环漩涡'], [9150, '连续险滩，稳住！'], [10720, '最后一道跌水！']] },
 ];
 const THEMES = {
-  forest: { ground: 'grass', treeSkip: 0.14, kinds: [0, 1, 2, 3, 4], flowers: true, reeds: 0.5, cliff: 0,
+  forest: { ground: 'grass', treeSkip: 0.14, kinds: [0, 1, 2, 3, 4], flowers: true, reeds: 0.5, cliff: 0, shrub: ['#3d7a30', '#69a544'], leaf: 0.28, sun: 1, grade: null,
     tint: 'rgba(64,142,128,.5)', depth: ['rgba(46,124,122,.45)', 'rgba(34,108,116,.5)', 'rgba(26,92,108,.5)', 'rgba(20,78,98,.5)', 'rgba(15,66,88,.45)', 'rgba(12,58,80,.35)'] },
-  canyon: { ground: 'cliff', treeSkip: 0.62, kinds: [4, 4, 2], flowers: false, reeds: 0.16, cliff: 1,
+  canyon: { ground: 'cliff', treeSkip: 0.62, kinds: [4, 4, 2], flowers: false, reeds: 0.16, cliff: 1, shrub: null, leaf: 0.08, sun: 1, grade: null,
     tint: 'rgba(52,118,112,.55)', depth: ['rgba(38,104,108,.5)', 'rgba(28,90,104,.5)', 'rgba(20,76,96,.55)', 'rgba(14,62,86,.55)', 'rgba(10,50,76,.5)', 'rgba(8,42,66,.4)'] },
+  autumn: { ground: 'autumn', treeSkip: 0.12, kinds: [5, 6, 7, 8, 5, 6, 4], flowers: false, reeds: 0.42, cliff: 0, shrub: ['#8a561c', '#cf8e2e'], leaf: 0.6, sun: 1.6, grade: 'rgba(255,146,64,.09)',
+    tint: 'rgba(72,132,122,.5)', depth: ['rgba(50,118,116,.45)', 'rgba(38,102,110,.5)', 'rgba(30,86,102,.5)', 'rgba(24,72,92,.5)', 'rgba(18,60,82,.45)', 'rgba(14,52,74,.35)'] },
 };
-let LV, TH, END, BASE_FLOW, PAR_TIME, BOOSTS, BRIDGES, SIGNS;
+let LV, TH, END, BASE_FLOW, PAR_TIME, BOOSTS, BRIDGES, SIGNS, STOPS;
 function setLevel(i) {
   LV = LEVELS[clamp(i | 0, 0, LEVELS.length - 1)]; TH = THEMES[LV.theme];
   END = LV.end; BASE_FLOW = LV.flow; PAR_TIME = LV.par; BOOSTS = LV.boosts; BRIDGES = LV.bridges; SIGNS = LV.signs;
+  STOPS = LV.gates.concat(LV.drops); SUN[0] = 6 * TH.sun; SUN[1] = 9 * TH.sun;      // 傍晚的影子更长
   chunks.clear();
 }
 const lvTitle = lv => `第${NUM[lv.id - 1]}关 · ${lv.name}`, bestKey = lv => `raft_l${lv.id}_best`;
@@ -286,10 +313,11 @@ const safeX = d => riverCx(d) + riverW(d) * LV.safe(d);
 const thal = d => clamp(-(riverCx(d + 12) - 2 * riverCx(d) + riverCx(d - 12)) / 144 * 1100, -0.42, 0.42);
 const boostAt = d => { for (const [a, b] of BOOSTS) if (d > a && d < b) return Math.min(1, (d - a) / 80, (b - d) / 80); return 0; };
 
-let rocks, logs, coins, rings, ducks, whirls;
+let rocks, logs, coins, rings, ducks, whirls, drops;
 function buildLevel() {
   const rnd = mulberry32(LV.seed);
   rocks = []; logs = []; coins = []; rings = []; ducks = []; whirls = [];
+  drops = LV.drops.map((d, i) => ({ d, x: safeX(d), half: 44, seed: i }));      // 跌水：水舌开在安全航线上
   // 漂木：玩家接近时才从上游“漂进来”，之后完全交给水流
   for (const ld of LV.logs) logs.push({ d0: ld, d: ld, x: riverCx(ld) + (rnd() * 1.2 - 0.6) * riverW(ld), vx: 0, vd: 0, seed: logs.length + 1,
     rot: (rnd() < 0.5 ? -1 : 1) * (0.25 + rnd() * 0.8), av: (rnd() - 0.5) * 0.5, len: LV.logLen, lock: false, on: false, fade: 1 });
@@ -311,7 +339,7 @@ function buildLevel() {
   // 桥、救生圈、漩涡、石门附近不放散石
   rocks = rocks.filter(r => !BRIDGES.some(b => Math.abs(b - r.d) < 30 + r.r)
     && !rings.some(g => Math.hypot(g.x - r.x, g.d - r.d) < r.r + 46) && !whirls.some(v => Math.hypot(v.x - r.x, v.d - r.d) < v.R * 0.62 + r.r)
-    && !LV.gates.some(g => Math.abs(g - r.d) < 100));
+    && !LV.gates.some(g => Math.abs(g - r.d) < 100) && !LV.drops.some(g => Math.abs(g - r.d) < 115));
   // 石门：一排礁石横在河上，只在安全航线处留一个缺口
   for (const gd of LV.gates) for (let x = riverCx(gd) - riverW(gd) + 14; x <= riverCx(gd) + riverW(gd) - 14; x += 42) {
     if (Math.abs(x - safeX(gd)) < LV.gateGap) continue;
@@ -330,12 +358,21 @@ function buildLevel() {
 }
 
 // 水流场：中间快、岸边慢，河道越窄越急；遇到礁石会分流绕行，石后是缓流区
-const FLOW = { x: 0, d: 0, spin: 0 };
+const FLOW = { x: 0, d: 0, spin: 0, hole: 0 };
 function flowAt(x, d) {
   const slope = riverSlope(d), w = riverW(d), n = clamp((x - riverCx(d)) / w, -1, 1);
   const m = n - thal(d), sp = BASE_FLOW * (LV.w0 / w) * Math.max(0.3, 1.04 - 0.5 * m * m) * (1 + 1.3 * boostAt(d));
   const il = 1 / Math.hypot(slope, 1);
-  let ux = sp * slope * il, ud = sp * il;
+  let ux = sp * slope * il, ud = sp * il, hole = 0;
+  for (const q of drops) {         // 跌水：落差前水被拉快；水舌里是急流；两侧落差下方是往回卷的回流
+    const pd = d - q.d; if (pd < -70 || pd > 80) continue;
+    let k = 1;
+    if (pd < 0) k = 1 + 0.7 * (1 + pd / 70);
+    else if (Math.abs(x - q.x) < q.half) k = 1.9 - 0.9 * pd / 80;
+    else if (pd < 60) hole = 1 - pd / 60; else k = 0.7;
+    ux *= k; ud *= k;
+    if (hole) { ud = lerp(ud * 0.7, -140, Math.min(1, hole * 1.6)); ux *= 1 - hole; }
+  }
   for (const r of rocks) {
     const pd = d - r.d; if (pd < -110 || pd > 130) continue;
     const px = x - r.x; if (px < -110 || px > 110) continue;
@@ -350,7 +387,7 @@ function flowAt(x, d) {
     const t = 1 - dist / v.R, vt = 150 * t * (1 - t * 0.3) * v.dir, vr = 55 * t;
     ux += -pd / dist * vt - px / dist * vr; ud += px / dist * vt - pd / dist * vr; spin += t * v.dir;
   }
-  FLOW.x = ux; FLOW.d = ud; FLOW.spin = spin;
+  FLOW.x = ux; FLOW.d = ud; FLOW.spin = spin; FLOW.hole = hole;
 }
 
 // ---------- 状态 ----------
@@ -380,20 +417,20 @@ function driftLogs(dt) {
       const off = px - riverCx(pd), lim = riverW(pd) - 7;
       if (Math.abs(off) > lim) { const sg = Math.sign(off); l.x -= sg * (Math.abs(off) - lim); if (l.vx * sg > 0) l.vx *= -0.2; l.av += k * sg * ad * 0.6 * dt * 60 * 0.05; }
     }
-    if (l.d > END + 300 || LV.gates.some(g => g > l.d0 && l.d > g - 70)) { l.on = false; l.fade = 0.99; }
+    if (l.d > END + 300 || STOPS.some(g => g > l.d0 && l.d > g - 80)) { l.on = false; l.fade = 0.99; }
   }
   for (const l of logs) if (!l.on && l.fade < 1 && l.fade > 0) l.fade = Math.max(0, l.fade - dt * 1.5);
 }
 // 随水漂的泡沫和落叶：按水流场移动，能看出水是怎么绕过礁石、卷进漩涡的
 let flecks = [];
 function newFleck(d) {
-  const leaf = Math.random() < (TH.flowers ? 0.28 : 0.08);
+  const leaf = Math.random() < TH.leaf;
   return { d, x: riverCx(d) + (Math.random() * 1.8 - 0.9) * riverW(d), leaf, r: leaf ? 2.4 + Math.random() * 1.6 : 1 + Math.random() * 1.8, seed: Math.random() * 100, c: Math.random() * 3 | 0 };
 }
 function reset() {
   buildLevel();
   raft = { x: W / 2, d: -90, vx: 0, vd: 0, a: 0, av: 0, hp: 3, inv: 0, coins: 0, time: 0, score: 0, combo: 0, bestCombo: 0,
-           phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0, st: 0, stam: 1, tired: false, sprint: false, spin: 0 };
+           phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0, st: 0, stam: 1, tired: false, sprint: false, spin: 0, hole: 0 };
   cam = { d: raft.d };
   particles = []; wake = []; floaters = []; confetti = []; flecks = [];
   for (let i = 0; i < 46; i++) flecks.push(newFleck(raft.d - 260 + Math.random() * 1000));
@@ -415,9 +452,34 @@ function audio() {
         s.connect(f).connect(g).connect(master); s.start(0, Math.random() * 2); return [f, g]; };
       [ambLp, ambGain] = mk('lowpass', 500, 0.3);        // 水流的低沉轰鸣
       hissGain = mk('bandpass', 3200, 0.5)[1];           // 水花的嘶嘶声
+      musicBus = ac.createGain(); musicBus.gain.value = 0; musicBus.connect(master);                   // 配乐：带一点回声
+      const dl = ac.createDelay(1), fb = ac.createGain(), wet = ac.createGain(); dl.delayTime.value = 0.45; fb.gain.value = 0.32; wet.gain.value = 0.4;
+      musicBus.connect(dl); dl.connect(fb).connect(dl); dl.connect(wet).connect(master);
     } catch (e) { ac = null; }
   }
   if (ac && ac.state === 'suspended') ac.resume();
+}
+// 配乐：按关卡的和弦进行生成的琶音，急流和冲刺时音符更密
+let musicBus = null, nextStep = 0, stepIdx = 0;
+function tone(m, t0, dur, type, vol) {
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(musicBus); o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function music() {
+  if (!ac || !musicBus) return;
+  const on = cfg.music && !muted && state !== 'pause';
+  musicBus.gain.setTargetAtTime(on ? 1 : 0, ac.currentTime, 0.25);
+  if (!on) { nextStep = 0; return; }
+  if (nextStep < ac.currentTime) nextStep = ac.currentTime + 0.06;
+  while (nextStep < ac.currentTime + 0.3) {
+    const i = stepIdx++, beat = i & 7, [root, minor] = LV.music[(i >> 3) % LV.music.length], ch = [0, minor ? 3 : 4, 7, 12];
+    const lively = state === 'play' && (boostAt(raft.d) > 0 || raft.sprint);
+    if (beat === 0) { tone(root - 12, nextStep, 2.3, 'sine', 0.075); tone(root + ch[1], nextStep, 2.3, 'sine', 0.016); tone(root + 7, nextStep, 2.3, 'sine', 0.016); }
+    if (hash(i, 7) < (lively ? 0.95 : 0.66)) tone(root + 12 + ch[[0, 2, 1, 2, 3, 2, 1, 2][beat]], nextStep, 0.5, 'triangle', 0.028);
+    if (!(beat & 1) && hash(i, 9) < (lively ? 0.5 : 0.25)) tone(root + 24 + ch[hash(i, 11) * 3 | 0], nextStep, 0.9, 'sine', 0.018);
+    nextStep += 0.3;
+  }
 }
 function setMuted(v) { muted = v; store.set('raft_muted', v); if (master) master.gain.value = v ? 0 : cfg.vol; }
 function beep(f, dur, type = 'sine', vol = 0.12, slide = 0, delay = 0) {
@@ -440,6 +502,8 @@ const sfx = {
   coin: c => { const f = 780 * Math.pow(1.04, Math.min(c, 14)); beep(f, 0.08, 'triangle', 0.09); beep(f * 1.5, 0.12, 'triangle', 0.09, 0, 0.06); },
   stroke: () => { swish(0.07, 1100, 0.26); beep(190, 0.07, 'sine', 0.05, -90); },
   wave: () => { swish(0.1, 1800, 0.3, 0.5); },
+  drop: () => { swish(0.22, 900, 0.7, 0.4); beep(74, 0.28, 'sine', 0.22, -34); },
+  combo: () => { [784, 988, 1175].forEach((f, i) => beep(f, 0.16, 'triangle', 0.07, 0, i * 0.05)); },
   hit: () => { beep(95, 0.3, 'sine', 0.3, -50); beep(240, 0.12, 'triangle', 0.08, -120); swish(0.22, 700, 0.5, 0.4); },
   bank: () => { swish(0.08, 420, 0.22, 1.2); },
   ring: () => { [523, 784, 1047].forEach((f, i) => beep(f, 0.14, 'sine', 0.1, 0, i * 0.07)); },
@@ -474,6 +538,7 @@ function collide(obj, nx, nd, lever = 0) {
 }
 function hurt(obj, nx, nd) {
   if (obj.lock || raft.inv > 0 || state !== 'play') return;
+  hitStop = 0.07;
   raft.av += (Math.random() - 0.5) * 1.5;
   obj.lock = true; obj.hit = true;
   raft.hp--; raft.hits++; raft.inv = 2; raft.squash = 1; raft.combo = 0; shake = 0.35; flash = 0.22;
@@ -573,6 +638,14 @@ function update(dt) {
   const rx = raft.vx - FLOW.x * fl, rd = raft.vd - FLOW.d * fl;
   const rf = rx * sa + rd * ca, rs = rx * ca - rd * sa, thrust = fL + fR;
   raft.rel = rf; raft.spin = FLOW.spin;
+  // 被回流卷住：艇被按在落差下面乱转，时间一长就会被拍一下再吐出去
+  const pinned = raft.vd < 60 && drops.some(q => raft.d - q.d > -18 && raft.d - q.d <= 0 && Math.abs(raft.x - q.x) >= q.half);      // 被顶在落差边缘也算
+  if ((FLOW.hole > 0.05 || pinned && raft.hole > 0) && playing) {
+    if (raft.hole === 0) { floatText('卷入回流！', raft.x, raft.d + 34, '#ffd8a8', 17); sfx.wave(); }
+    raft.hole += dt; raft.av += (Math.random() - 0.5) * 16 * dt; shake = Math.max(shake, 0.06);
+    if (Math.random() < dt * 22) splash(raft.x + (Math.random() - 0.5) * 30, raft.d + (Math.random() - 0.5) * 30, 2, 'rgba(255,255,255,.9)', 90);
+    if (raft.hole > 2.4) { raft.hole = 0.01; raft.vd += 240; hurt({}, 0, 1); }
+  } else raft.hole = Math.max(0, raft.hole - dt * 2);
   raft.vx += ((thrust - KF * rf) * sa - KS * rs * ca + (steer ? DRAW_F * raft.st : 0)) * dt;      // 转向时外侧队员向外拉桨，带着艇横移
   raft.vd += ((thrust - KF * rf) * ca + KS * rs * sa) * dt;
   const d0 = raft.d;
@@ -580,6 +653,12 @@ function update(dt) {
   if (raft.d < -140) { raft.d = -140; raft.vd = Math.max(0, raft.vd); }
   raft.squash = Math.max(0, raft.squash - dt * 4); raft.bump = Math.max(0, raft.bump - dt * 3.2);
 
+  // 冲下跌水
+  for (const q of drops) if (d0 < q.d && raft.d >= q.d) {
+    const off = Math.abs(raft.x - q.x);
+    raft.bump = 1; shake = Math.max(shake, 0.16); splash(raft.x + sa * 16, raft.d + ca * 16, 18, 'rgba(255,255,255,.95)', 170, 1.5); sfx.drop();
+    if (off < q.half) { raft.vd += 55; if (off < q.half * 0.6 && playing) { raft.score += 100; floatText('漂亮！+100', raft.x, raft.d + 40, '#d8f3f5', 16); } }
+  }
   // 急流里的驻波：冲过浪尖时颠一下
   if (boost > 0.4 && Math.floor(raft.d / WAVE_GAP) !== Math.floor(d0 / WAVE_GAP)) {
     raft.bump = 1; raft.vd *= 0.985; raft.av += (Math.random() - 0.5) * 0.5 * boost;
@@ -653,12 +732,15 @@ function update(dt) {
     }
     // 星星与连击
     for (const c of coins) {
-      if (c.got || Math.abs(c.d - raft.d) > 40) continue;
-      if (Math.hypot(c.x - raft.x, c.d - raft.d) < 26) {
+      if (c.got || Math.abs(c.d - raft.d) > 60) continue;
+      const cdist = Math.hypot(c.x - raft.x, c.d - raft.d);
+      if (cdist < 54 && cdist >= 26) { const k = Math.min(1, 7 * dt); c.x += (raft.x - c.x) * k; c.d += (raft.d - c.d) * k; }      // 靠近时星星会被吸过来
+      else if (cdist < 26) {
         c.got = true; raft.coins++; raft.combo++; raft.bestCombo = Math.max(raft.bestCombo, raft.combo);
         const pts = 100 + 10 * Math.min(raft.combo - 1, 20); raft.score += pts;
         sfx.coin(raft.combo); splash(c.x, c.d, 6, '#ffe066', 80);
         floatText('+' + pts, c.x, c.d + 28, '#ffe066', 14);
+        if (raft.combo % 10 === 0) { floatText(`连击 ×${raft.combo}！`, raft.x, raft.d + 58, '#fff3bf', 22); sfx.combo(); }
       }
     }
     while (nextCoin < coins.length && coins[nextCoin].d < raft.d - 45) { if (!coins[nextCoin].got) raft.combo = 0; nextCoin++; }
@@ -699,7 +781,6 @@ function win() {
 // ---------- 绘制 ----------
 let baseY = 0, camD = 0;
 const Y = d => baseY - (d - camD);
-const SUN = [6, 9];             // 影子偏移（阳光来自左上）
 
 function star(x, y, r, rot = 0) {
   ctx.beginPath();
@@ -974,10 +1055,10 @@ function drawTerrain(d0, d1) {
       ctx.fillStyle = '#b9a98f'; ctx.beginPath(); ctx.roundRect(-12, -1.8, 24, 3.6, 1.8); ctx.fill();
       ctx.fillStyle = '#8f7f66'; ctx.fillRect(-9, 0.3, 18, 0.8); ctx.fillRect(3, -4.5, 1.6, 4); ctx.restore();
     }
-    if (TH.flowers && hash(i, 340 + s) < 0.78) for (let k = 0; k < 3; k++) {
+    if (TH.shrub && hash(i, 340 + s) < 0.78) for (let k = 0; k < 3; k++) {
       const x = ex + s * (16 + hash(i, 350 + k) * 7), yy = y + (k - 1) * 9, r = 3.5 + hash(i, 360 + k) * 4;
       ctx.fillStyle = 'rgba(14,34,14,.3)'; circle(x + 2, yy + 3, r); ctx.fill();
-      ctx.fillStyle = '#3d7a30'; circle(x, yy, r); ctx.fill(); ctx.fillStyle = '#69a544'; circle(x - r * 0.25, yy - r * 0.3, r * 0.55); ctx.fill();
+      ctx.fillStyle = TH.shrub[0]; circle(x, yy, r); ctx.fill(); ctx.fillStyle = TH.shrub[1]; circle(x - r * 0.25, yy - r * 0.3, r * 0.55); ctx.fill();
     }
   }
   // 树影（落在岸上和水面上）
@@ -1053,6 +1134,40 @@ function draw() {
     else { ctx.fillStyle = 'rgba(255,255,255,.5)'; circle(f.x, y, f.r); ctx.fill(); circle(f.x + f.r * 1.2, y + f.r * 0.6, f.r * 0.6); ctx.fill(); }
   }
 
+  // 跌水
+  for (const q of drops) {
+    const y = Y(q.d); if (y < -160 || y > H + 90) continue;
+    const xl = riverCx(q.d) - riverW(q.d) - 14, xr = riverCx(q.d) + riverW(q.d) + 14, a = q.x - q.half, b = q.x + q.half;
+    let g = ctx.createLinearGradient(0, y + 80, 0, y);                        // 落差上方：被拉平、发暗的光滑水面
+    g.addColorStop(0, 'rgba(8,46,58,0)'); g.addColorStop(1, 'rgba(8,46,58,.42)');
+    ctx.fillStyle = g; ctx.fillRect(xl, y, xr - xl, 80);
+    for (const [x0, x1] of [[xl, a], [b, xr]]) {                               // 水舌两侧：翻滚的白色回流
+      if (x1 - x0 < 4) continue;
+      ctx.save(); ctx.beginPath(); ctx.rect(x0, y - 60, x1 - x0, 60); ctx.clip();
+      g = ctx.createLinearGradient(0, y - 60, 0, y); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,.88)');
+      ctx.fillStyle = g; ctx.fillRect(x0, y - 60, x1 - x0, 60);
+      fillPattern(PAT.foam, T * 9, camD + T * 80, 0.9, 1.5, 0.7);
+      for (let k = 0; k < 9; k++) {
+        const bx = x0 + hash(q.seed * 31 + k, x0 | 0) * (x1 - x0), fr = (hash(q.seed, 50 + k) + T * (0.7 + hash(k, 3) * 0.5)) % 1;
+        ctx.fillStyle = `rgba(255,255,255,${0.75 * Math.sin(fr * Math.PI)})`; circle(bx, y - 44 + fr * 38, 4 + hash(k, 5) * 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+    g = ctx.createLinearGradient(0, y, 0, y - 86);                            // 水舌：光滑的深色 V 形
+    g.addColorStop(0, 'rgba(6,52,64,.62)'); g.addColorStop(1, 'rgba(6,52,64,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.lineTo(q.x, y - 86); ctx.closePath(); ctx.fill();
+    ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 3;
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(q.x + s * q.half, y); ctx.quadraticCurveTo(q.x + s * q.half * 0.55, y - 40, q.x + s * 5 + Math.sin(T * 5 + s) * 2, y - 82); ctx.stroke(); }
+    for (let k = 0; k < 3; k++) {                                              // 水舌下方的一串浪
+      const wy = y - 98 - k * 26, ww = 36 - k * 6, wob = Math.sin(T * 6 + k * 2) * 1.5;
+      ctx.strokeStyle = `rgba(6,40,56,${0.3 - k * 0.07})`; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 9); ctx.quadraticCurveTo(q.x, wy + 4 + wob, q.x + ww, wy + 9); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.75 - k * 0.2})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 3); ctx.quadraticCurveTo(q.x, wy - 3 + wob, q.x + ww, wy + 3); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(2,24,34,.6)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(xl, y + 2.5); ctx.lineTo(xr, y + 2.5); ctx.stroke();      // 落差的边缘
+    ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 2.6;
+    for (const [x0, x1] of [[xl, a], [b, xr]]) { ctx.beginPath(); for (let x = x0; x <= x1; x += 9) ctx.lineTo(x, y - 0.5 + Math.sin(x * 0.4 + T * 7) * 1.2); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(200,236,236,.4)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.stroke();
+  }
   // 急流：白水 + 驻波
   for (const [a, b] of BOOSTS) {
     if (b < d0 || a > d1) continue;
@@ -1162,6 +1277,11 @@ function draw() {
   }
   ctx.globalAlpha = 1;
   // 急流上的水雾
+  if (cfg.quality) for (const q of drops) {
+    const y = Y(q.d) - 34; if (y < -120 || y > H + 120) continue;
+    const x = riverCx(q.d), R = 130, g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, 'rgba(255,255,255,.2)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.5); ctx.translate(-x, -y); ctx.fillStyle = g; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();
+  }
   if (cfg.quality) for (const [a, b] of BOOSTS) {
     if (b < d0 || a > d1) continue;
     for (let d = a + 60; d < b - 40; d += 120) {
@@ -1193,6 +1313,7 @@ function draw() {
   if (!vignette || vignette.h !== H) { vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
     vignette.addColorStop(0, 'rgba(0,14,20,0)'); vignette.addColorStop(1, 'rgba(0,14,20,.36)'); vignette.h = H; }
   ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+  if (TH.grade) { ctx.fillStyle = TH.grade; ctx.fillRect(0, 0, W, H); }      // 夕阳的暖色调
 
   if (flash > 0) { ctx.fillStyle = `rgba(255,60,60,${flash * 1.2})`; ctx.fillRect(0, 0, W, H); }
   for (const c of confetti) {
@@ -1256,7 +1377,9 @@ function drawHUD() {
   ctx.fillStyle = '#f76707'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
   oval(bx, by1 - (by1 - by0) * p, 6, 9); ctx.fill(); ctx.stroke();
   outlined('终', bx, by0 - 15, 13, '#fff');
-  if (boostAt(raft.d) > 0.5 && state === 'play') outlined('急  流', W / 2, 84, 17, '#d8f3f5');
+  if (state === 'play' && raft.hole > 0.15) outlined('回流！全力划出去', W / 2, 84, 17 + Math.sin(T * 14) * 1.2, '#ffd8a8');
+  else if (boostAt(raft.d) > 0.5 && state === 'play') outlined('急  流', W / 2, 84, 17, '#d8f3f5');
+  if (toast && toast.t > 0) { ctx.globalAlpha = Math.min(1, toast.t); outlined(toast.text, W / 2, H - 150, 14, '#fff8dc'); ctx.globalAlpha = 1; }
   if (isTouch && (state === 'play' || state === 'ready')) {
     const sx = W / 2, sy = H - 66;
     ctx.fillStyle = input.S && !raft.tired ? 'rgba(255,212,59,.5)' : 'rgba(255,255,255,.16)'; circle(sx, sy, 36); ctx.fill();
@@ -1291,9 +1414,10 @@ function showMenu() {
   const cards = LEVELS.map((lv, i) => {
     const b = store.get(bestKey(lv), null);
     if (!unlocked(i)) return `<div class="lv locked"><b><i class="lock"></i>${lvTitle(lv)}</b><span>通关「${LEVELS[i - 1].name}」后解锁</span></div>`;
-    return `<div class="lv${lv === LV ? ' sel' : ''}" data-lv="${i}"><b>${lvTitle(lv)}</b><span>${b ? `${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分` : lv.intro}</span></div>`;
+    return `<div class="lv${lv === LV ? ' sel' : ''}" data-lv="${i}"><b>${lvTitle(lv)}</b><span>${b ? `${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒` : lv.intro}</span></div>`;
   }).join('');
-  show(`<h1>橡皮艇漂流</h1><h2>选择关卡</h2>${cards}
+  const total = LEVELS.reduce((n, lv) => n + ((store.get(bestKey(lv), null) || {}).stars || 0), 0);
+  show(`<h1>橡皮艇漂流</h1><h2>选择关卡　<span style="color:#ffd23f">★ ${total}/${LEVELS.length * 3}</span></h2>${cards}
     <p class="small">${isTouch ? '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺'
       : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br><kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
     <p class="small">橡皮艇只经得起 3 次碰撞！</p>`, [['出发！', () => start()], ['设置', () => showSettings(showMenu)]]);
@@ -1316,13 +1440,18 @@ function showSettings(back) {
     ${row('音量', seg('vol', [['静音', 0], ['低', 0.35], ['中', 0.7], ['高', 1]], muted ? 0 : cfg.vol))}
     ${row('转向灵敏度', seg('sens', [['低', 0], ['中', 1], ['高', 2]], cfg.sens))}
     ${row('画质', seg('quality', [['流畅', 0], ['精细', 1]], cfg.quality))}
+    ${row('背景音乐', seg('music', [['关', 0], ['开', 1]], cfg.music ? 1 : 0))}
     ${row('撞击震动', seg('shake', [['关', 0], ['开', 1]], cfg.shake ? 1 : 0))}
+    ${document.fullscreenEnabled ? row('全屏', seg('fs', [['关', 0], ['开', 1]], document.fullscreenElement ? 1 : 0)) : ''}
     ${row('游戏进度', '<div class="seg"><button class="opt warn" id="wipe">重置进度</button></div>')}
     <p class="small">转向灵敏度越高，艇头转得越快、角度越大。<br>手机上卡顿时把画质调到"流畅"。</p>`, [['返回', back]]);
   panel.querySelectorAll('.opt[data-k]').forEach(b => { b.onclick = e => {
     e.stopPropagation(); audio(); const k = b.dataset.k, v = +b.dataset.v;
     if (k === 'vol') { if (v > 0) cfg.vol = v; setMuted(v === 0); if (v > 0) beep(880, 0.12, 'triangle', 0.1); }
     else if (k === 'shake') cfg.shake = !!v;
+    else if (k === 'music') cfg.music = !!v;
+    else if (k === 'fs') { const done = () => showSettings(back); (v ? document.documentElement.requestFullscreen() : document.exitFullscreen()).then(done, done); return; }
+    else if (k === 'quality') { cfg.quality = v; cfg.qLock = true; }
     else cfg[k] = v;
     saveCfg(); if (k === 'quality') resize();
     showSettings(back);
@@ -1360,7 +1489,8 @@ function showDead() {
   if (state !== 'dead') return;
   const pct = Math.max(0, Math.round(raft.d / END * 100));
   const nearWhirl = whirls.some(v => Math.hypot(v.x - raft.x, v.d - raft.d) < 110);
-  const tip = nearWhirl ? '离漩涡越近吸力越大：提前往另一侧靠，被吸住就冲刺甩脱。'
+  const tip = drops.some(q => Math.abs(q.d - raft.d) < 150) ? '跌水两侧的白水是回流：对准中间光滑的水舌冲下去，被卷住就冲刺划出去。'
+    : nearWhirl ? '离漩涡越近吸力越大：提前往另一侧靠，被吸住就冲刺甩脱。'
     : logs.some(l => l.on && Math.hypot(l.x - raft.x, l.d - raft.d) < 120) ? '漂木跟着水流走：别从后面硬撞，看准空当从旁边超过去。'
     : '星星标出的就是安全航线。<br>橡皮艇有惯性，看到礁石要提前转向！';
   show(`<h1>橡皮艇漏气了…</h1><h2>${lvTitle(LV)} · 已漂流 ${pct}%</h2>
@@ -1418,16 +1548,27 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 // ---------- 主循环 ----------
 const DT = 1 / 120;
-let last = performance.now(), acc = 0, manual = false;
+let last = performance.now(), acc = 0, manual = false, hitStop = 0, slowT = 0, toast = null, endT = 0;
 function frame(now) {
-  if (!manual) {
-    acc += Math.min(0.1, (now - last) / 1000);
-    while (acc >= DT) { update(DT); acc -= DT; }
-  }
+  const real = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (toast) toast.t -= real;
+  endT = state === 'win' || state === 'dead' ? endT + real : 0;
+  if (!manual) {
+    if (hitStop > 0) hitStop -= real;                                   // 撞击瞬间的顿帧
+    else acc += real * (endT > 0 && endT < 0.9 ? 0.45 : 1);             // 冲线和沉没时短暂的慢动作
+    while (acc >= DT) { update(DT); acc -= DT; }
+    // 连续掉帧时自动降到流畅画质（手动选过画质就不再干预）
+    if (state === 'play' && cfg.quality && !cfg.qLock) {
+      slowT = real > 0.03 ? slowT + real : Math.max(0, slowT - real * 0.5);
+      if (slowT > 2.5) { cfg.quality = 0; saveCfg(); resize(); slowT = 0; toast = { text: '画面有些卡，已切换到流畅画质（可在设置里改回）', t: 5 }; }
+    }
+  }
+  music();
   if (ambGain) {       // 环境声：离急流越近、船速越快，水声越大
     const active = state === 'play' || state === 'ready' || state === 'win';
-    const rap = Math.max(boostAt(raft.d), boostAt(raft.d + 180) * 0.6, boostAt(raft.d + 360) * 0.3);
+    let rap = Math.max(boostAt(raft.d), boostAt(raft.d + 180) * 0.6, boostAt(raft.d + 360) * 0.3);
+    for (const q of drops) rap = Math.max(rap, 0.85 * (1 - Math.abs(q.d - raft.d - 60) / 380));      // 跌水的轰鸣
     const t = ac.currentTime, wob = 1 + Math.sin(now / 900) * 0.12 + Math.sin(now / 2300) * 0.1;
     ambGain.gain.setTargetAtTime((active ? 0.11 + 0.3 * rap : 0.05) * wob, t, 0.3);
     ambLp.frequency.setTargetAtTime(480 + 1300 * rap, t, 0.4);
@@ -1446,7 +1587,7 @@ requestAnimationFrame(frame);
 // 供自动化验收使用
 window.__raft = {
   get state() { return state; }, get raft() { return raft; }, get result() { return result; },
-  get level() { return { rocks, logs, coins, rings, ducks, whirls, END, id: LV.id }; },
+  get level() { return { rocks, logs, coins, rings, ducks, whirls, drops, END, id: LV.id }; }, get cfg() { return cfg; },
   input, safeX, riverCx, riverW, start, draw,
   setManual(v) { manual = v; }, step() { update(DT); },
 };
