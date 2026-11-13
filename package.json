@@ -1,0 +1,13 @@
+{
+  "name": "rrafting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "橡皮艇漂流：一个浏览器里的俯视角漂流游戏",
+  "scripts": {
+    "start": "npx --yes serve -l 8080 .",
+    "test": "node tests/smoke.js"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

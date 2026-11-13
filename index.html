@@ -6,14 +6,30 @@
 <meta name="theme-color" content="#14261a">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d6f86'/%3E%3Crect x='10' y='5' width='12' height='22' rx='6' fill='%23f76707'/%3E%3Crect x='13' y='9' width='6' height='14' rx='3' fill='%232f3b42'/%3E%3C/svg%3E">
 <title>橡皮艇漂流</title>
+<meta name="description" content="划着橡皮艇顺流而下：躲礁石、绕漂木、冲急流、闯漩涡和跌水。浏览器里直接玩，支持键盘和触屏。">
+<meta property="og:title" content="橡皮艇漂流">
+<meta property="og:description" content="划着橡皮艇顺流而下：躲礁石、绕漂木、冲急流、闯漩涡和跌水。">
+<meta property="og:type" content="website">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="橡皮艇漂流">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
-  html, body { margin: 0; height: 100%; background: #14261a; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #14261a; overflow: hidden; overscroll-behavior: none; }
+  body { box-sizing: border-box; -webkit-touch-callout: none;
+         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  #loading, #rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
+                      padding: 24px; text-align: center; color: #9fd0dc; font-size: 16px; line-height: 1.7; }
+  #rotate { display: none; z-index: 10; background: #14261a; color: #e2f1f4; font-size: 18px; }
+  @media (orientation: landscape) and (max-height: 480px) and (pointer: coarse) { #rotate { display: flex; } }
   body { display: flex; align-items: center; justify-content: center;
          font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
          -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
   #wrap { position: relative; box-shadow: 0 0 40px rgba(0,0,0,.6); }
   canvas { display: block; }
-  #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  #overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
              background: rgba(8, 28, 36, .5); color: #fff; text-align: center; }
   #overlay.hidden { display: none; }
   #panel { width: 80%; max-width: 340px; max-height: 94%; overflow-y: auto; box-sizing: border-box; padding: 22px 20px 20px; border-radius: 18px;
@@ -62,13 +78,25 @@
 </style>
 </head>
 <body>
+<div id="loading">正在准备河道…</div>
+<div id="rotate">请把手机竖过来玩</div>
+<noscript><div style="position:fixed;top:40%;left:0;right:0;text-align:center;color:#e2f1f4">这个游戏需要启用 JavaScript 才能运行。</div></noscript>
 <div id="wrap">
   <canvas id="c"></canvas>
-  <div id="overlay"><div id="panel"></div></div>
+  <div id="overlay" class="hidden"><div id="panel"></div></div>
 </div>
 <script>
-(() => {
+function main() {
 'use strict';
+const VERSION = '1.0.0';
+
+// 旧版浏览器（如 iOS 15）没有 roundRect
+if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+  let q = Array.isArray(r) ? (r.length >= 4 ? r : r.length === 2 ? [r[0], r[1], r[0], r[1]] : [r[0], r[0], r[0], r[0]]) : [r, r, r, r];
+  const m = Math.min(w, h) / 2; q = q.map(v => Math.max(0, Math.min(v || 0, m)));
+  this.moveTo(x + q[0], y); this.arcTo(x + w, y, x + w, y + h, q[1]); this.arcTo(x + w, y + h, x, y + h, q[2]);
+  this.arcTo(x, y + h, x, y, q[3]); this.arcTo(x, y, x + w, y, q[0]); this.closePath();
+};
 
 // ---------- 基础 ----------
 const W = 480;                 // 逻辑宽度
@@ -89,18 +117,21 @@ try { Object.assign(cfg, JSON.parse(localStorage.getItem('raft_settings')) || {}
 const saveCfg = () => { try { localStorage.setItem('raft_settings', JSON.stringify(cfg)); } catch (e) {} };
 const SENS = [{ rate: 0.72, a: 0.5 }, { rate: 1, a: 0.6 }, { rate: 1.35, a: 0.72 }];
 function resize() {
-  const ww = window.innerWidth, wh = window.innerHeight;
+  const cs = getComputedStyle(document.body), pad = k => parseFloat(cs['padding' + k]) || 0;       // 避开刘海和底部横条
+  const ww = Math.max(120, window.innerWidth - pad('Left') - pad('Right')), wh = Math.max(160, window.innerHeight - pad('Top') - pad('Bottom'));
   H = Math.max(640, Math.min(1100, Math.round(W * wh / ww)));
   const scale = Math.min(ww / W, wh / H);
-  const dpr = cfg.quality ? Math.min(window.devicePixelRatio || 1, 2) : 1;      // 低画质按 1 倍分辨率渲染
+  // 渲染分辨率封顶：精细最多 2 倍逻辑分辨率，流畅不超过 1 倍，避免高分屏上白白多画像素
+  const pr = cfg.quality ? Math.min(scale * (window.devicePixelRatio || 1), 2) : Math.min(scale, 1);
   wrap.style.width = canvas.style.width = W * scale + 'px';
   wrap.style.height = canvas.style.height = H * scale + 'px';
-  canvas.width = Math.round(W * scale * dpr);
-  canvas.height = Math.round(H * scale * dpr);
+  canvas.width = Math.round(W * pr);
+  canvas.height = Math.round(H * pr);
   ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
   chunks.clear();
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 resize();
 
 function mulberry32(a) {
@@ -269,7 +300,7 @@ const LEVELS = [
     cx: d => W / 2 + 78 * smooth(200, 800, d) * (Math.sin(d / 470) * 0.72 + Math.sin(d / 190 + 1) * 0.28),
     w: d => 104 + 12 * Math.sin(d / 330 + 1) - 10 * smooth(6000, 6500, d) * (1 - smooth(8200, 8700, d)),
     safe: d => 0.5 * Math.sin(d / 430 + 2) * smooth(300, 900, d),
-    rockStart: 700, gap: [175, 80, 170], clear: 47, logLen: 21, logPad: 8, gates: [2300, 4700, 7050, 9600], gateGap: 50, whirls: [1150, 4950, 5500, 7350, 10550], drops: [], music: [[A, 1], [F, 0], [C, 0], [E, 1]],
+    rockStart: 700, gap: [185, 80, 175], clear: 48, logLen: 21, logPad: 8, gates: [2300, 4700, 7050, 9600], gateGap: 54, whirls: [1150, 4950, 5500, 7350, 10550], drops: [], music: [[A, 1], [F, 0], [C, 0], [E, 1]],
     boosts: [[1500, 2100], [3600, 4500], [6200, 6900], [8800, 10300]], bridges: [2850, 7650],
     logs: [2550, 3250, 5650, 6300, 7900, 8350], rings: [3350, 6000, 9050], ducks: [[420, 1], [5350, -1]],
     signs: [[100, '鹰嘴峡：河道更窄，水流更急'], [850, '漩涡会把艇吸过去——绕开，或冲刺甩脱'], [2020, '石门：从缺口穿过去'],
@@ -336,14 +367,28 @@ function buildLevel() {
     }
     d += (inBoost ? LV.gap[2] : LV.gap[0] - LV.gap[1] * diff) * (0.7 + rnd() * 0.6);
   }
+  // 主流线上隔一段放一块礁石：随波逐流的艇正好会被水带到它面前，必须划桨才能避开
+  for (let md = LV.rockStart + 450; md < END - 300; md += 760) {
+    const x = riverCx(md) + thal(md) * riverW(md) * 0.55, r = 15 + rnd() * 5;
+    if (Math.abs(x - safeX(md)) > r + LV.clear && !rocks.some(k => Math.hypot(k.x - x, k.d - md) < k.r + r + 44)) rocks.push({ x, d: md, r });
+  }
   // 桥、救生圈、漩涡、石门附近不放散石
   rocks = rocks.filter(r => !BRIDGES.some(b => Math.abs(b - r.d) < 30 + r.r)
     && !rings.some(g => Math.hypot(g.x - r.x, g.d - r.d) < r.r + 46) && !whirls.some(v => Math.hypot(v.x - r.x, v.d - r.d) < v.R * 0.62 + r.r)
     && !LV.gates.some(g => Math.abs(g - r.d) < 100) && !LV.drops.some(g => Math.abs(g - r.d) < 115));
   // 石门：一排礁石横在河上，只在安全航线处留一个缺口
-  for (const gd of LV.gates) for (let x = riverCx(gd) - riverW(gd) + 14; x <= riverCx(gd) + riverW(gd) - 14; x += 42) {
-    if (Math.abs(x - safeX(gd)) < LV.gateGap) continue;
-    rocks.push({ x: x + (rnd() - 0.5) * 8, d: gd + (rnd() - 0.5) * 16, r: 14 + rnd() * 5 });
+  // 散石要么离岸足够远能过艇，要么干脆贴在岸上：不留会把艇夹住的窄缝
+  for (const r of rocks) {
+    const c = riverCx(r.d), w = riverW(r.d), off = r.x - c, gap = w - Math.abs(off) - r.r;
+    if (gap < 25) r.x = c + (off < 0 ? -1 : 1) * (w + r.r * 0.15);
+  }
+  for (const gd of LV.gates) {
+    const span = 2 * riverW(gd) - 28, n = Math.max(1, Math.round(span / 42));
+    for (let k = 0; k <= n; k++) {
+      const x = riverCx(gd) - riverW(gd) + 14 + span * k / n;
+      if (Math.abs(x - safeX(gd)) < LV.gateGap) continue;
+      rocks.push({ x: x + (rnd() - 0.5) * 6, d: gd + (rnd() - 0.5) * 16, r: 14 + rnd() * 5, gate: true });
+    }
   }
   rocks.sort((a, b) => a.d - b.d);
   rocks.forEach((r, i) => {
@@ -430,7 +475,8 @@ function newFleck(d) {
 function reset() {
   buildLevel();
   raft = { x: W / 2, d: -90, vx: 0, vd: 0, a: 0, av: 0, hp: 3, inv: 0, coins: 0, time: 0, score: 0, combo: 0, bestCombo: 0,
-           phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0, st: 0, stam: 1, tired: false, sprint: false, spin: 0, hole: 0 };
+           phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0, st: 0, stam: 1, tired: false, sprint: false, spin: 0, hole: 0, touch: 0, stuck: 0 };
+  prng = mulberry32(LV.seed ^ 0x51ed27);
   cam = { d: raft.d };
   particles = []; wake = []; floaters = []; confetti = []; flecks = [];
   for (let i = 0; i < 46; i++) flecks.push(newFleck(raft.d - 260 + Math.random() * 1000));
@@ -438,6 +484,7 @@ function reset() {
 }
 
 // ---------- 声音 ----------
+const link = (...n) => { for (let i = 0; i < n.length - 1; i++) n[i].connect(n[i + 1]); };     // 不依赖 connect() 的返回值，兼容旧版 Safari
 let ac = null, master = null, ambGain = null, ambLp = null, hissGain = null, noiseBuf = null, nextBird = 0;
 function audio() {
   if (!ac) {
@@ -449,12 +496,12 @@ function audio() {
       for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
       const mk = (type, freq, q) => { const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true; s.playbackRate.value = 0.7 + Math.random() * 0.5;
         const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q; const g = ac.createGain(); g.gain.value = 0;
-        s.connect(f).connect(g).connect(master); s.start(0, Math.random() * 2); return [f, g]; };
+        link(s, f, g, master); s.start(0, Math.random() * 2); return [f, g]; };
       [ambLp, ambGain] = mk('lowpass', 500, 0.3);        // 水流的低沉轰鸣
       hissGain = mk('bandpass', 3200, 0.5)[1];           // 水花的嘶嘶声
       musicBus = ac.createGain(); musicBus.gain.value = 0; musicBus.connect(master);                   // 配乐：带一点回声
       const dl = ac.createDelay(1), fb = ac.createGain(), wet = ac.createGain(); dl.delayTime.value = 0.45; fb.gain.value = 0.32; wet.gain.value = 0.4;
-      musicBus.connect(dl); dl.connect(fb).connect(dl); dl.connect(wet).connect(master);
+      musicBus.connect(dl); link(dl, fb, dl); link(dl, wet, master);
     } catch (e) { ac = null; }
   }
   if (ac && ac.state === 'suspended') ac.resume();
@@ -464,7 +511,7 @@ let musicBus = null, nextStep = 0, stepIdx = 0;
 function tone(m, t0, dur, type, vol) {
   const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
   g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  o.connect(g).connect(musicBus); o.start(t0); o.stop(t0 + dur + 0.05);
+  link(o, g, musicBus); o.start(t0); o.stop(t0 + dur + 0.05);
 }
 function music() {
   if (!ac || !musicBus) return;
@@ -488,7 +535,7 @@ function beep(f, dur, type = 'sine', vol = 0.12, slide = 0, delay = 0) {
   o.type = type; o.frequency.setValueAtTime(f, t0);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t0 + dur);
   g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-  o.connect(g).connect(master); o.start(t0); o.stop(t0 + dur + 0.02);
+  link(o, g, master); o.start(t0); o.stop(t0 + dur + 0.02);
 }
 function swish(vol = 0.05, freq = 1300, dur = 0.2, q = 0.8) {
   if (!ac || muted) return;
@@ -496,7 +543,7 @@ function swish(vol = 0.05, freq = 1300, dur = 0.2, q = 0.8) {
   s.buffer = noiseBuf; s.playbackRate.value = 0.8 + Math.random() * 0.5;
   f.type = 'bandpass'; f.frequency.setValueAtTime(freq, t0); f.frequency.exponentialRampToValueAtTime(freq * 0.5, t0 + dur); f.Q.value = q;
   g.gain.setValueAtTime(0.001, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-  s.connect(f).connect(g).connect(master); s.start(t0, Math.random() * 2, dur + 0.05);
+  link(s, f, g, master); s.start(t0, Math.random() * 2, dur + 0.05);
 }
 const sfx = {
   coin: c => { const f = 780 * Math.pow(1.04, Math.min(c, 14)); beep(f, 0.08, 'triangle', 0.09); beep(f * 1.5, 0.12, 'triangle', 0.09, 0, 0.06); },
@@ -519,6 +566,7 @@ const sfx = {
 
 // ---------- 逻辑 ----------
 function splash(x, d, n, color = '#fff', sp = 130, up = 1) {
+  if (particles.length > 420) return;
   for (let i = 0; i < n; i++) {
     const an = Math.random() * TAU, s = sp * (0.3 + Math.random() * 0.7);
     particles.push({ x, d, vx: Math.cos(an) * s, vd: Math.sin(an) * s, life: 0.5 + Math.random() * 0.4, max: 0.9, r: 1.2 + Math.random() * 2.3, color, z: 0, vz: (50 + Math.random() * 120) * up });
@@ -528,6 +576,7 @@ function floatText(text, x, d, color = '#fff', size = 16) { floaters.push({ text
 
 // 碰到障碍：橡皮艇会弹开并被撞得打转；同一障碍在分开前不会重复扣血
 function collide(obj, nx, nd, lever = 0) {
+  raft.touch = 0.15;
   const vn = raft.vx * nx + raft.vd * nd;
   if (vn < 0) {
     raft.vx -= 1.5 * vn * nx; raft.vd -= 1.5 * vn * nd;
@@ -539,7 +588,7 @@ function collide(obj, nx, nd, lever = 0) {
 function hurt(obj, nx, nd) {
   if (obj.lock || raft.inv > 0 || state !== 'play') return;
   hitStop = 0.07;
-  raft.av += (Math.random() - 0.5) * 1.5;
+  raft.av += (prng() - 0.5) * 1.5;
   obj.lock = true; obj.hit = true;
   raft.hp--; raft.hits++; raft.inv = 2; raft.squash = 1; raft.combo = 0; shake = 0.35; flash = 0.22;
   splash(raft.x - nx * RAFT_R, raft.d - nd * RAFT_R, 22, 'rgba(255,255,255,.9)', 170);
@@ -579,6 +628,7 @@ function hullContact(ax, ad, bx, bd, min) {
 }
 
 let bankSfxCd = 0, strokeSfxCd = 0, fleckTick = 0;
+let prng = mulberry32(1);      // 物理里用到的随机数：每局同一个种子，同样的操作得到同样的结果
 function update(dt) {
   T += dt;
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -642,7 +692,7 @@ function update(dt) {
   const pinned = raft.vd < 60 && drops.some(q => raft.d - q.d > -18 && raft.d - q.d <= 0 && Math.abs(raft.x - q.x) >= q.half);      // 被顶在落差边缘也算
   if ((FLOW.hole > 0.05 || pinned && raft.hole > 0) && playing) {
     if (raft.hole === 0) { floatText('卷入回流！', raft.x, raft.d + 34, '#ffd8a8', 17); sfx.wave(); }
-    raft.hole += dt; raft.av += (Math.random() - 0.5) * 16 * dt; shake = Math.max(shake, 0.06);
+    raft.hole += dt; raft.av += (prng() - 0.5) * 16 * dt; shake = Math.max(shake, 0.06);
     if (Math.random() < dt * 22) splash(raft.x + (Math.random() - 0.5) * 30, raft.d + (Math.random() - 0.5) * 30, 2, 'rgba(255,255,255,.9)', 90);
     if (raft.hole > 2.4) { raft.hole = 0.01; raft.vd += 240; hurt({}, 0, 1); }
   } else raft.hole = Math.max(0, raft.hole - dt * 2);
@@ -661,7 +711,7 @@ function update(dt) {
   }
   // 急流里的驻波：冲过浪尖时颠一下
   if (boost > 0.4 && Math.floor(raft.d / WAVE_GAP) !== Math.floor(d0 / WAVE_GAP)) {
-    raft.bump = 1; raft.vd *= 0.985; raft.av += (Math.random() - 0.5) * 0.5 * boost;
+    raft.bump = 1; raft.vd *= 0.985; raft.av += (prng() - 0.5) * 0.5 * boost;
     splash(raft.x + sa * 20, raft.d + ca * 20, 7, 'rgba(255,255,255,.9)', 110);
     if (playing) sfx.wave();
   }
@@ -677,12 +727,24 @@ function update(dt) {
   const c2 = riverCx(raft.d), w2 = riverW(raft.d), off = raft.x - c2, lim = w2 - HULL_R - HULL_OFF * Math.abs(sa) + 2;
   if (Math.abs(off) > lim) {
     const s = Math.sign(off);
-    raft.x = c2 + s * lim;
+    raft.x = c2 + s * lim; raft.touch = 0.15;
     if (raft.vx * s > 0) {
       if (raft.vx * s > 60 && bankSfxCd <= 0) { sfx.bank(); bankSfxCd = 0.4; splash(raft.x + s * RAFT_R, raft.d, 6, '#cdbb8e', 60); raft.av -= s * 0.8; }
       raft.vx = -raft.vx * 0.25;
     }
     raft.vd -= raft.vd * 1.2 * dt;
+  }
+
+  // 防卡死：顶着障碍几乎不动超过一秒，队员就用桨把艇撑开（先退一点，再横向离开最近的礁石）
+  raft.touch = Math.max(0, raft.touch - dt);
+  raft.stuck = playing && raft.touch > 0 && spd < 18 && raft.hole === 0 ? raft.stuck + dt : Math.max(0, raft.stuck - dt * 3);
+  if (raft.stuck > 1.1) {
+    let near = null, best = 80;
+    for (const r of rocks) { const dist = Math.hypot(r.x - raft.x, r.d - raft.d) - r.r; if (dist < best) { best = dist; near = r; } }
+    let s = near ? Math.sign(raft.x - near.x) || 1 : -Math.sign(off) || 1;
+    if (s * off > lim - 30) s = -s;                    // 那一侧是岸，就往另一侧
+    raft.vx += s * 170; raft.vd -= 80; raft.stuck = 0; sfx.bank();
+    floatText('撑开！', raft.x, raft.d + 30, '#d8f3f5', 14);
   }
 
   // 鸭子：靠近就飞走
@@ -718,7 +780,7 @@ function update(dt) {
       const ux = Math.cos(l.rot) * l.len, ud = Math.sin(l.rot) * l.len, min = 8 + HULL_R - 1;
       const c = hullContact(l.x - ux, l.d - ud, l.x + ux, l.d + ud, min);
       if (c.pen > 0) {
-        raft.x += c.nx * c.pen * 0.7; raft.d += c.nd * c.pen * 0.7; l.x -= c.nx * c.pen * 0.3; l.d -= c.nd * c.pen * 0.3;
+        raft.touch = 0.15; raft.x += c.nx * c.pen * 0.7; raft.d += c.nd * c.pen * 0.7; l.x -= c.nx * c.pen * 0.3; l.d -= c.nd * c.pen * 0.3;
         const vn = (raft.vx - l.vx) * c.nx + (raft.vd - l.vd) * c.nd;
         if (vn < 0) {
           raft.vx -= 1.1 * vn * c.nx; raft.vd -= 1.1 * vn * c.nd; l.vx += 0.5 * vn * c.nx; l.vd += 0.5 * vn * c.nd;
@@ -772,6 +834,10 @@ function win() {
   const total = coins.length, gotCoins = raft.coins >= Math.ceil(total * 0.8), clean = raft.hits === 0;
   result = { stars: 1 + (gotCoins ? 1 : 0) + (clean ? 1 : 0), gotCoins, clean, timeBonus, hpBonus,
              score: raft.score + timeBonus + hpBonus, time: raft.time, fast: raft.time <= PAR_TIME };
+  // 冲线的瞬间就存档，不等结算面板弹出
+  const old = result.old = store.get(bestKey(LV), null);
+  result.best = { stars: Math.max(result.stars, old ? old.stars : 0), score: Math.max(result.score, old ? old.score || 0 : 0), time: Math.min(result.time, old ? old.time : 1e9) };
+  store.set(bestKey(LV), result.best);
   const COL = ['#ffd23f', '#ff6b6b', '#4dabf7', '#69db7c', '#ffffff', '#ff922b'];
   for (let i = 0; i < 110; i++) confetti.push({ x: Math.random() * W, y: -20 - Math.random() * 320, vy: 110 + Math.random() * 150,
     vx: (Math.random() - 0.5) * 50, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 12, ph: Math.random() * TAU, c: COL[i % COL.length], s: 5 + Math.random() * 5 });
@@ -1421,11 +1487,12 @@ function showMenu() {
     <p class="small">${isTouch ? '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺'
       : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br><kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
     <p class="small">橡皮艇只经得起 3 次碰撞！</p>`, [['出发！', () => start()], ['设置', () => showSettings(showMenu)]]);
-  panel.querySelectorAll('.lv[data-lv]').forEach(el => { el.onclick = e => {
-    e.stopPropagation(); const i = +el.dataset.lv; if (!unlocked(i)) return;
-    if (LEVELS[i] !== LV) { setLevel(i); store.set('raft_level', i); reset(); }
-    showMenu();
-  }; });
+  panel.querySelectorAll('.lv[data-lv]').forEach(el => { el.onclick = e => { e.stopPropagation(); pickLevel(+el.dataset.lv); }; });
+}
+function pickLevel(i) {
+  if (i < 0 || i >= LEVELS.length || !unlocked(i)) return;
+  if (LEVELS[i] !== LV) { setLevel(i); store.set('raft_level', i); reset(); }
+  showMenu();
 }
 function start(skipCountdown, level) {
   audio(); if (level !== undefined && LEVELS[level] !== LV) { setLevel(level); store.set('raft_level', level); }
@@ -1444,7 +1511,8 @@ function showSettings(back) {
     ${row('撞击震动', seg('shake', [['关', 0], ['开', 1]], cfg.shake ? 1 : 0))}
     ${document.fullscreenEnabled ? row('全屏', seg('fs', [['关', 0], ['开', 1]], document.fullscreenElement ? 1 : 0)) : ''}
     ${row('游戏进度', '<div class="seg"><button class="opt warn" id="wipe">重置进度</button></div>')}
-    <p class="small">转向灵敏度越高，艇头转得越快、角度越大。<br>手机上卡顿时把画质调到"流畅"。</p>`, [['返回', back]]);
+    <p class="small">转向灵敏度越高，艇头转得越快、角度越大。<br>手机上卡顿时把画质调到"流畅"。</p>
+    <p class="small" style="opacity:.6">橡皮艇漂流 v${VERSION}</p>`, [['返回', back]]);
   panel.querySelectorAll('.opt[data-k]').forEach(b => { b.onclick = e => {
     e.stopPropagation(); audio(); const k = b.dataset.k, v = +b.dataset.v;
     if (k === 'vol') { if (v > 0) cfg.vol = v; setMuted(v === 0); if (v > 0) beep(880, 0.12, 'triangle', 0.1); }
@@ -1469,21 +1537,27 @@ function showSettings(back) {
 function showWin() {
   if (state !== 'win') return;
   const r = result, total = coins.length;
-  const old = store.get(bestKey(LV), null);
-  const best = { stars: Math.max(r.stars, old ? old.stars : 0), score: Math.max(r.score, old ? old.score || 0 : 0), time: Math.min(r.time, old ? old.time : 1e9) };
+  const old = r.old, best = r.best;
   const isNew = old && (r.score > (old.score || 0));
-  store.set(bestKey(LV), best);
   for (let i = 0; i < r.stars; i++) beep(660 + i * 220, 0.18, 'triangle', 0.1, 0, 0.25 + i * 0.32);
   const mark = ok => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✔' : '✘'}</span>`;
   const next = LEVELS.indexOf(LV) + 1, hasNext = next < LEVELS.length;
-  const again = ['再玩一次', () => start()], menu = ['选关', toMenu];
+  const again = ['再玩一次', () => start()], menu = ['选关', toMenu], sh = ['分享成绩', share];
   show(`<h1>到达终点！</h1><h2>${lvTitle(LV)}</h2>${starsHtml(r.stars)}
     <p class="score">${fmt(r.score)}<span class="small"> 分</span></p>
     <p class="small">${isNew ? '<span class="new">新纪录！</span>' : old ? `最高 ${fmt(best.score)} 分` : ''}</p>
     <div class="stats"><div><b>${r.time.toFixed(1)}</b>用时(秒)</div><div><b>${raft.coins}/${total}</b>星星</div><div><b>×${raft.bestCombo}</b>最高连击</div></div>
     <div class="goals">${mark(true)} 抵达终点<br>${mark(r.gotCoins)} 收集 80% 以上的星星<br>${mark(r.clean)} 全程零碰撞</div>
     <p class="small">${r.fast ? `⚡ ${PAR_TIME} 秒内完成　` : ''}${hasNext ? (old ? '' : `已解锁${lvTitle(LEVELS[next])}`) : '你已通过全部关卡！'}</p>`,
-    hasNext ? [[`下一关：${LEVELS[next].name}`, () => start(false, next)], again, menu] : [again, menu]);
+    hasNext ? [[`下一关：${LEVELS[next].name}`, () => start(false, next)], again, menu, sh] : [again, menu, sh]);
+}
+function share() {
+  const r = result, url = /^https?:$/.test(location.protocol) ? location.href : '';
+  const text = `我在《橡皮艇漂流》${lvTitle(LV)}拿到 ${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}，${fmt(r.score)} 分，用时 ${r.time.toFixed(1)} 秒！`;
+  const say = msg => { const b = [...panel.querySelectorAll('button')].find(x => /分享|复制/.test(x.textContent)); if (b) b.textContent = msg; };
+  if (navigator.share) navigator.share(url ? { title: '橡皮艇漂流', text, url } : { title: '橡皮艇漂流', text }).catch(() => {});
+  else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url ? text + ' ' + url : text).then(() => say('已复制到剪贴板'), () => say('复制失败'));
+  else say('这个浏览器不支持分享');
 }
 function showDead() {
   if (state !== 'dead') return;
@@ -1497,7 +1571,8 @@ function showDead() {
     <p>${isTouch ? tip.replace('按 ↓ 或松手', '松手') : tip}</p>`, [['再试一次', () => start()], ['选关', toMenu]]);
 }
 function showPause() {
-  show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p>${isTouch ? '' : '<p class="small">按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始</p>'}`,
+  show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p><p class="small">${isTouch ? '按住左侧 / 右侧转向　两侧同时按住前进<br>中间按钮冲刺'
+    : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br>按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始'}</p>`,
     [['继续', togglePause], ['重新开始', () => start()], ['设置', () => showSettings(showPause)], ['选关', toMenu]]);
 }
 function togglePause() {
@@ -1509,6 +1584,10 @@ function togglePause() {
 const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', ArrowUp: 'U', w: 'U', W: 'U', ArrowDown: 'B', s: 'B', S: 'B', Shift: 'S' };
 const pointers = new Map();
 window.addEventListener('keydown', e => {
+  if (state === 'menu' && panel.querySelector('.lv')) {          // 选关界面：↑ ↓ 或数字键换关
+    const cur = LEVELS.indexOf(LV), to = e.key === 'ArrowDown' ? cur + 1 : e.key === 'ArrowUp' ? cur - 1 : /^[1-9]$/.test(e.key) ? +e.key - 1 : -1;
+    if (to >= 0) { e.preventDefault(); pickLevel(to); return; }
+  }
   if (KEYS[e.key]) { input[KEYS[e.key]] = true; e.preventDefault(); return; }
   if (e.repeat) return;
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
@@ -1524,7 +1603,12 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if (KEYS[e.key]) input[KEYS[e.key]] = false; if (e.key === ' ') input.S = false; });
 function autoPause() { input.L = input.R = input.U = input.B = input.S = false; pointers.clear(); if (state === 'play') togglePause(); }
 window.addEventListener('blur', autoPause);
-document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
+document.addEventListener('visibilitychange', () => {       // 切到后台：暂停并彻底静音
+  if (document.hidden) { autoPause(); if (ac && ac.state === 'running') ac.suspend(); }
+  else if (ac && ac.state === 'suspended') ac.resume();
+});
+const rotateMq = window.matchMedia ? matchMedia('(orientation: landscape) and (max-height: 480px) and (pointer: coarse)') : null;
+window.addEventListener('resize', () => { if (rotateMq && rotateMq.matches) autoPause(); });
 
 function syncPointers() {
   let L = false, R = false, S = false;
@@ -1549,7 +1633,21 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 // ---------- 主循环 ----------
 const DT = 1 / 120;
 let last = performance.now(), acc = 0, manual = false, hitStop = 0, slowT = 0, toast = null, endT = 0;
+let frameErrors = 0, halted = false;
 function frame(now) {
+  if (halted) return;
+  requestAnimationFrame(frame);
+  try { tick(now); frameErrors = 0; }
+  catch (e) {
+    if (frameErrors++ === 0) console.error(e);
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    if (frameErrors > 40) {        // 连续出错：停下来，给玩家一个能恢复的出口
+      halted = true; state = 'menu';
+      show('<h1>出了点问题</h1><p>游戏遇到了意外错误。<br>你的进度已经保存，刷新页面即可继续。</p>', [['刷新页面', () => location.reload()]]);
+    }
+  }
+}
+function tick(now) {
   const real = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (toast) toast.t -= real;
@@ -1570,13 +1668,12 @@ function frame(now) {
     let rap = Math.max(boostAt(raft.d), boostAt(raft.d + 180) * 0.6, boostAt(raft.d + 360) * 0.3);
     for (const q of drops) rap = Math.max(rap, 0.85 * (1 - Math.abs(q.d - raft.d - 60) / 380));      // 跌水的轰鸣
     const t = ac.currentTime, wob = 1 + Math.sin(now / 900) * 0.12 + Math.sin(now / 2300) * 0.1;
-    ambGain.gain.setTargetAtTime((active ? 0.11 + 0.3 * rap : 0.05) * wob, t, 0.3);
+    ambGain.gain.setTargetAtTime((state === 'pause' ? 0 : active ? 0.11 + 0.3 * rap : 0.05) * wob, t, 0.3);
     ambLp.frequency.setTargetAtTime(480 + 1300 * rap, t, 0.4);
-    hissGain.gain.setTargetAtTime(active ? 0.012 + 0.07 * rap + Math.min(1, Math.hypot(raft.vx, raft.vd) / 260) * 0.012 : 0.006, t, 0.3);
+    hissGain.gain.setTargetAtTime(state === 'pause' ? 0 : active ? 0.012 + 0.07 * rap + Math.min(1, Math.hypot(raft.vx, raft.vd) / 260) * 0.012 : 0.006, t, 0.3);
     if (now > nextBird) { if (nextBird && active && rap < 0.2) sfx.bird(); nextBird = now + 2500 + Math.random() * 6000; }
   }
   draw();
-  requestAnimationFrame(frame);
 }
 
 { let lv = clamp(store.get('raft_level', 0) | 0, 0, LEVELS.length - 1); while (!unlocked(lv)) lv--; setLevel(lv); }
@@ -1591,7 +1688,15 @@ window.__raft = {
   input, safeX, riverCx, riverW, start, draw,
   setManual(v) { manual = v; }, step() { update(DT); },
 };
-})();
+}
+// 先让“正在准备”显示出来，再开始生成贴图
+requestAnimationFrame(() => setTimeout(() => {
+  const tip = document.getElementById('loading');
+  try { main(); tip.remove(); }
+  catch (e) { tip.textContent = '游戏加载失败。请刷新页面，或换一个较新的浏览器试试。'; console.error(e); }
+}, 0));
+// 通过 https 访问时启用离线缓存
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
 </script>
 </body>
 </html>
