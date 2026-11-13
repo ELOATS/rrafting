@@ -46,6 +46,13 @@
   .lv { display: flex; flex-direction: column; gap: 2px; text-align: left; margin: 8px 0; padding: 10px 14px; border-radius: 12px; cursor: pointer;
         background: rgba(255,255,255,.07); border: 1.5px solid rgba(255,255,255,.14); }
   .lv b { font-size: 16px; } .lv span { font-size: 12px; color: #9fd0dc; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 9px 0; font-size: 14px; text-align: left; }
+  .seg { display: flex; border-radius: 9px; overflow: hidden; border: 1.5px solid rgba(255,255,255,.22); flex-shrink: 0; }
+  button.opt { margin: 0; padding: 7px 11px; font-size: 13px; font-weight: 500; color: #cfe6ea; background: transparent; border-radius: 0; box-shadow: none; }
+  button.opt + button.opt { border-left: 1.5px solid rgba(255,255,255,.22); }
+  button.opt.on { color: #5a2d00; background: #ffd23f; font-weight: 700; }
+  button.opt.warn { color: #ffa8a8; }
+  button.opt:active { transform: none; box-shadow: none; }
   .lv.locked { cursor: default; opacity: .55; }
   .lock { display: inline-block; position: relative; width: 11px; height: 9px; margin-right: 7px; border-radius: 2px; background: #cfe6ea; }
   .lock::before { content: ''; position: absolute; left: 1.5px; top: -6px; width: 4px; height: 6px; border: 2px solid #cfe6ea; border-bottom: 0; border-radius: 4px 4px 0 0; }
@@ -75,11 +82,16 @@ const FONT = '-apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC
 const TAU = Math.PI * 2;
 
 const chunks = new Map();     // 预渲染的地形分块
+// 设置：音量、转向灵敏度、画质、震动
+const cfg = { vol: 1, sens: 1, quality: 1, shake: true };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('raft_settings')) || {}); } catch (e) {}
+const saveCfg = () => { try { localStorage.setItem('raft_settings', JSON.stringify(cfg)); } catch (e) {} };
+const SENS = [{ rate: 0.72, a: 0.5 }, { rate: 1, a: 0.6 }, { rate: 1.35, a: 0.72 }];
 function resize() {
   const ww = window.innerWidth, wh = window.innerHeight;
   H = Math.max(640, Math.min(1100, Math.round(W * wh / ww)));
   const scale = Math.min(ww / W, wh / H);
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = cfg.quality ? Math.min(window.devicePixelRatio || 1, 2) : 1;      // 低画质按 1 倍分辨率渲染
   wrap.style.width = canvas.style.width = W * scale + 'px';
   wrap.style.height = canvas.style.height = H * scale + 'px';
   canvas.width = Math.round(W * scale * dpr);
@@ -360,7 +372,7 @@ function audio() {
   if (!ac) {
     try {
       ac = new (window.AudioContext || window.webkitAudioContext)();
-      master = ac.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ac.destination);
+      master = ac.createGain(); master.gain.value = muted ? 0 : cfg.vol; master.connect(ac.destination);
       noiseBuf = ac.createBuffer(1, ac.sampleRate * 3, ac.sampleRate);
       const ch = noiseBuf.getChannelData(0);
       for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
@@ -373,7 +385,7 @@ function audio() {
   }
   if (ac && ac.state === 'suspended') ac.resume();
 }
-function setMuted(v) { muted = v; store.set('raft_muted', v); if (master) master.gain.value = v ? 0 : 1; }
+function setMuted(v) { muted = v; store.set('raft_muted', v); if (master) master.gain.value = v ? 0 : cfg.vol; }
 function beep(f, dur, type = 'sine', vol = 0.12, slide = 0, delay = 0) {
   if (!ac || muted) return;
   const t0 = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
@@ -478,10 +490,10 @@ function update(dt) {
   raft.stam = clamp(raft.stam + (sprint ? -dt / 3 : dt / 5), 0, 1); raft.sprint = sprint; strokeMul = sprint ? 1.5 : 1;
   const fwd = U || (L && R) || sprint, back = B && !fwd, steer = (R ? 1 : 0) - (L ? 1 : 0);
   // 转向是渐进的：轻点微调，按住才逐渐打到最大角度
-  const rate = (steer ? 2 : 2.6) * dt; raft.st += clamp((playing ? steer : 0) - raft.st, -rate, rate);
+  const sens = SENS[cfg.sens] || SENS[1], rate = (steer ? 2 * sens.rate : 2.6) * dt; raft.st += clamp((playing ? steer : 0) - raft.st, -rate, rate);
   // 按住 ← / → 艇头转向那一侧，松开后队员自动把艇头划正
   const slope = riverSlope(raft.d), aTan = Math.atan(slope), boost = boostAt(raft.d);
-  const target = aTan + raft.st * STEER_A, err = target - raft.a;
+  const target = aTan + raft.st * sens.a, err = target - raft.a;
   const any = fwd || back || steer !== 0, keyL = any, keyR = any, fix = playing && !any;
   const pL = fwd || back || R ? 1 : 0.8, pR = fwd || back || L ? 1 : 0.8;        // 转向时外侧全力、内侧轻划
   const wasIdle = raft.phL === 0 && raft.phR === 0, dir = back ? -0.7 : sprint ? 1.6 : 1;
@@ -489,7 +501,7 @@ function update(dt) {
   const fR = strokeSide('phR', keyR || (fix && err < -0.22), dir, dt, 1) * (keyR ? pR : 0);
   if ((raft.phL > 0 || raft.phR > 0) && strokeSfxCd <= 0 && (wasIdle || raft.phL < 0.03 && raft.phL > 0 || raft.phR < 0.03 && raft.phR > 0)) { sfx.stroke(); strokeSfxCd = 0.3; }
 
-  let torque = state === 'dead' ? 6 : err * STEER_K + FLOW.spin * 14;
+  let torque = state === 'dead' ? 6 : err * STEER_K * sens.rate + FLOW.spin * 14;
   if (boost > 0) torque += Math.sin(LT * 5.3) * Math.sin(LT * 2.1 + 1) * 1.5 * boost;      // 急流里的颠簸
   raft.av += (torque - KAV * raft.av) * dt;
   raft.a += raft.av * dt;
@@ -915,7 +927,7 @@ function getChunk(ci) {
 }
 
 function draw() {
-  const sx = shake > 0 ? (Math.random() - 0.5) * shake * 26 : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake * 26 : 0;
+  const sk = cfg.shake ? shake * 26 : 0, sx = (Math.random() - 0.5) * sk, sy = (Math.random() - 0.5) * sk;
   baseY = H * 0.74; camD = cam.d;
   ctx.save(); ctx.translate(sx, sy);
   const d0 = camD - (H - baseY) - 60, d1 = camD + baseY + 60;
@@ -927,8 +939,8 @@ function draw() {
   const river = riverPath(d0, d1);
   ctx.save(); ctx.clip(river);
   fillPattern(PAT.ripA, T * 6, camD - T * 70, 0.8, 2.3, 0.15);
-  fillPattern(PAT.ripA, 90 - T * 5, camD - T * 105, 1.35, 3.6, 0.12);
-  fillPattern(PAT.ripB, 40 + T * 4, camD - T * 88, 0.9, 1.7, 0.28, 'lighter');
+  if (cfg.quality) fillPattern(PAT.ripA, 90 - T * 5, camD - T * 105, 1.35, 3.6, 0.12);
+  if (cfg.quality) fillPattern(PAT.ripB, 40 + T * 4, camD - T * 88, 0.9, 1.7, 0.28, 'lighter');
 
   // 急流：白水 + 驻波
   for (const [a, b] of BOOSTS) {
@@ -1038,7 +1050,7 @@ function draw() {
   }
   ctx.globalAlpha = 1;
   // 急流上的水雾
-  for (const [a, b] of BOOSTS) {
+  if (cfg.quality) for (const [a, b] of BOOSTS) {
     if (b < d0 || a > d1) continue;
     for (let d = a + 60; d < b - 40; d += 120) {
       const k = Math.floor(d / 120), x = riverCx(d) + Math.sin(T * 0.5 + k) * 40, y = Y(d + Math.sin(T * 0.3 + k * 2) * 30), R = 80;
@@ -1170,7 +1182,7 @@ function showMenu() {
   show(`<h1>橡皮艇漂流</h1><h2>选择关卡</h2>${cards}
     <p class="small">${isTouch ? '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺'
       : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br><kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
-    <p class="small">橡皮艇只经得起 3 次碰撞！</p>`, [['出发！', () => start()]]);
+    <p class="small">橡皮艇只经得起 3 次碰撞！</p>`, [['出发！', () => start()], ['设置', () => showSettings(showMenu)]]);
   panel.querySelectorAll('.lv[data-lv]').forEach(el => { el.onclick = e => {
     e.stopPropagation(); const i = +el.dataset.lv; if (!unlocked(i)) return;
     if (LEVELS[i] !== LV) { setLevel(i); store.set('raft_level', i); reset(); }
@@ -1183,6 +1195,34 @@ function start(skipCountdown, level) {
   if (skipCountdown) { state = 'play'; raft.vd = 60; } else { state = 'ready'; countdown = 2.1; sfx.tick(); }
 }
 function toMenu() { reset(); showMenu(); }
+function showSettings(back) {
+  const seg = (key, opts, cur) => `<div class="seg">${opts.map(([label, v]) => `<button class="opt${v === cur ? ' on' : ''}" data-k="${key}" data-v="${v}">${label}</button>`).join('')}</div>`;
+  const row = (label, body) => `<div class="row"><span>${label}</span>${body}</div>`;
+  show(`<h1>设置</h1><h2>更改立即生效并自动保存</h2>
+    ${row('音量', seg('vol', [['静音', 0], ['低', 0.35], ['中', 0.7], ['高', 1]], muted ? 0 : cfg.vol))}
+    ${row('转向灵敏度', seg('sens', [['低', 0], ['中', 1], ['高', 2]], cfg.sens))}
+    ${row('画质', seg('quality', [['流畅', 0], ['精细', 1]], cfg.quality))}
+    ${row('撞击震动', seg('shake', [['关', 0], ['开', 1]], cfg.shake ? 1 : 0))}
+    ${row('游戏进度', '<div class="seg"><button class="opt warn" id="wipe">重置进度</button></div>')}
+    <p class="small">转向灵敏度越高，艇头转得越快、角度越大。<br>手机上卡顿时把画质调到"流畅"。</p>`, [['返回', back]]);
+  panel.querySelectorAll('.opt[data-k]').forEach(b => { b.onclick = e => {
+    e.stopPropagation(); audio(); const k = b.dataset.k, v = +b.dataset.v;
+    if (k === 'vol') { if (v > 0) cfg.vol = v; setMuted(v === 0); if (v > 0) beep(880, 0.12, 'triangle', 0.1); }
+    else if (k === 'shake') cfg.shake = !!v;
+    else cfg[k] = v;
+    saveCfg(); if (k === 'quality') resize();
+    showSettings(back);
+  }; });
+  const wipe = document.getElementById('wipe');
+  wipe.onclick = e => {
+    e.stopPropagation();
+    if (!wipe.dataset.sure) { wipe.dataset.sure = 1; wipe.textContent = '再点一次确认'; return; }
+    for (const lv of LEVELS) { try { localStorage.removeItem(bestKey(lv)); } catch (err) {} }
+    store.set('raft_level', 0);
+    if (state === 'pause') { showSettings(back); document.getElementById('wipe').textContent = '已重置'; }
+    else { setLevel(0); reset(); state = 'menu'; showSettings(showMenu); document.getElementById('wipe').textContent = '已重置'; }
+  };
+}
 function showWin() {
   if (state !== 'win') return;
   const r = result, total = coins.length;
@@ -1212,8 +1252,12 @@ function showDead() {
   show(`<h1>橡皮艇漏气了…</h1><h2>${lvTitle(LV)} · 已漂流 ${pct}%</h2>
     <p>${isTouch ? tip.replace('按 ↓ 或松手', '松手') : tip}</p>`, [['再试一次', () => start()], ['选关', toMenu]]);
 }
+function showPause() {
+  show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p>${isTouch ? '' : '<p class="small">按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始</p>'}`,
+    [['继续', togglePause], ['重新开始', () => start()], ['设置', () => showSettings(showPause)], ['选关', toMenu]]);
+}
 function togglePause() {
-  if (state === 'play') { state = 'pause'; show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p>${isTouch ? '' : '<p class="small">按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始</p>'}`, [['继续', togglePause], ['重新开始', () => start()], ['选关', toMenu]]); }
+  if (state === 'play') { state = 'pause'; showPause(); }
   else if (state === 'pause') { state = 'play'; overlay.classList.add('hidden'); }
 }
 
