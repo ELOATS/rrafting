@@ -1172,9 +1172,12 @@ function drawRaft() {
   // 船头推开的水
   const bow = clamp(raft.rel / 150, 0, 1) * (z < 5 ? 1 : 0);
   if (bow > 0.08 && !raft.sink) {
-    ctx.strokeStyle = `rgba(255,255,255,${0.85 * bow})`; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * 2, -28); ctx.quadraticCurveTo(s * 13, -24, s * (17 + bow * 8), -8 + bow * 10); ctx.stroke(); }
-    ctx.fillStyle = `rgba(255,255,255,${0.55 * bow})`; oval(0, -27.5, 7, 2.6); ctx.fill();
+    for (const s of [-1, 1]) for (let j = 0; j < 8; j++) {        // 贴着船头两侧散开的一点碎沫，越往后越小越淡
+      const t = j / 7, q0 = 1 - t, bx = s * (q0 * q0 * 2 + 2 * q0 * t * 12 + t * t * (15 + bow * 5)), by = q0 * q0 * -28 + 2 * q0 * t * -25 + t * t * (-12 + bow * 6);
+      ctx.fillStyle = `rgba(255,255,255,${0.6 * bow * (1 - t * 0.75)})`;
+      circle(bx + Math.sin(T * 7 + j * 1.9 + s) * 0.7, by + Math.cos(T * 6 + j * 1.3) * 0.7, (1.5 - t * 0.8) * (0.7 + bow * 0.5) + Math.sin(T * 9 + j + s) * 0.2); ctx.fill();
+    }
+    ctx.fillStyle = `rgba(255,255,255,${0.3 * bow})`; oval(0, -27.6, 4.5, 1.6); ctx.fill();
   }
   // 浮沉（整体放大）→ 弹性形变（沿撞击方向压扁再回弹）→ 俯仰（纵向缩短）
   const sc = (1 - raft.sink * 0.5) * (1 + z * 0.007), jel = clamp(b.jel, -0.6, 1);
@@ -1210,12 +1213,10 @@ function drawRaft() {
   if (raft.hp < 3) { ctx.fillStyle = `rgba(70,50,60,${0.13 * (3 - raft.hp)})`; hull(0); ctx.fill(); }      // 漏气后发瘪发暗
   ctx.save(); hull(0); ctx.clip();
   ctx.strokeStyle = 'rgba(120,40,30,.5)'; ctx.lineWidth = 2.4; hull(0); ctx.stroke();            // 气囊外缘往下卷，暗一圈
-  ctx.strokeStyle = lit('rgba(255,244,228,.85)', 'rgba(255,244,228,.25)', 'rgba(255,244,228,0)', 16); ctx.lineWidth = 1.5; hull(2.7); ctx.stroke();      // 圆筒顶上的高光
+  ctx.strokeStyle = lit('rgba(255,244,228,.5)', 'rgba(255,244,228,.14)', 'rgba(255,244,228,0)', 16); ctx.lineWidth = 2.6; hull(3); ctx.stroke();      // 圆筒顶上的高光
   ctx.strokeStyle = 'rgba(110,36,26,.32)'; ctx.lineWidth = 0.7; ctx.beginPath();                    // 气室之间的接缝
   for (const sy of [-9, 3, 15]) for (const s of [-1, 1]) { ctx.moveTo(s * 13.5, sy); ctx.lineTo(s * 7, sy + 0.6); }
-  for (const s of [-1, 1]) { ctx.moveTo(s * 9.5, -19); ctx.lineTo(s * 4.4, -15.5); }
   ctx.moveTo(-3, 24); ctx.lineTo(-2.6, 17.6); ctx.moveTo(3, 24); ctx.lineTo(2.6, 17.6); ctx.stroke();
-  ctx.fillStyle = 'rgba(250,238,214,.9)'; ctx.beginPath(); ctx.moveTo(-8.2, -18.2); ctx.quadraticCurveTo(0, -24.6, 8.2, -18.2); ctx.lineTo(7, -16.4); ctx.quadraticCurveTo(0, -22.4, -7, -16.4); ctx.closePath(); ctx.fill();      // 船头的一道白条
   ctx.restore();
   // ---- 舱底 ----
   ctx.save(); hull(6.3); ctx.clip(); ctx.translate(tilt * 0.4, dip * 0.4);
@@ -1230,7 +1231,7 @@ function drawRaft() {
   ctx.fillStyle = lit('#f09a5c', '#d9703a', '#a54f26', 3); circle(-3.3 + cx * 0.3, 16.6 + cy * 0.3, 1.9); ctx.fill(); ctx.strokeStyle = ink(0.4); ctx.lineWidth = 0.5; ctx.stroke();
   ctx.strokeStyle = '#efe4c8'; ctx.lineWidth = 0.9; circle(2.9 + cx * 0.3, 16.6 + cy * 0.3, 1.7); ctx.stroke(); ctx.lineWidth = 0.6; circle(2.9 + cx * 0.3, 16.6 + cy * 0.3, 0.8); ctx.stroke();
   // ---- 安全绳和绳环 ----
-  ctx.strokeStyle = 'rgba(250,244,226,.9)'; ctx.lineWidth = 0.7; hull(1.1); ctx.stroke();
+  ctx.strokeStyle = 'rgba(244,236,214,.5)'; ctx.lineWidth = 0.6; hull(1.1); ctx.stroke();
   for (const [rx, ry] of [[-12.6, -7], [12.6, -7], [-12.6, 9], [12.6, 9], [-6.5, 23], [6.5, 23], [0, -25.6]]) { ctx.fillStyle = '#d9dcd6'; circle(rx, ry, 1.05); ctx.fill(); ctx.strokeStyle = ink(0.55); ctx.lineWidth = 0.45; ctx.stroke(); }
   ctx.strokeStyle = ink(0.42); ctx.lineWidth = 1; hull(0); ctx.stroke();                         // 淡淡勾一圈，让艇形从水面上分出来
 
@@ -1597,9 +1598,8 @@ function drawScene() {
     let g = ctx.createLinearGradient(0, y + 80, 0, y);                        // 落差上方：被拉平、颜色变深的水
     g.addColorStop(0, col(TH.deep, 0)); g.addColorStop(1, col(TH.deep, 0.4));
     ctx.fillStyle = g; ctx.fillRect(xl, y, xr - xl, 80);
-    // 落差下方翻滚的白水：除了中间的水舌，整条河都是留白
+    // 落差下方翻滚的白水，铺满整条河
     ctx.save(); ctx.beginPath(); ctx.rect(xl, y - 62, xr - xl, 62); ctx.clip();
-    ctx.beginPath(); ctx.rect(xl - 10, y - 200, xr - xl + 20, 220); ctx.moveTo(a, y + 1); ctx.quadraticCurveTo(q.x - q.half * 0.55, y - 40, q.x, y - 86); ctx.quadraticCurveTo(q.x + q.half * 0.55, y - 40, b, y + 1); ctx.closePath(); ctx.clip('evenodd');
     g = ctx.createLinearGradient(0, y - 62, 0, y); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.45, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,.95)');
     ctx.fillStyle = g; ctx.fillRect(xl, y - 62, xr - xl, 62);
     fillPattern(PAT.foam, T * 9, camD + T * 80, 0.9, 1.5, 0.6);
@@ -1608,21 +1608,22 @@ function drawScene() {
       ctx.fillStyle = `rgba(255,255,255,${0.8 * Math.sin(fr * Math.PI)})`; circle(bx, y - 46 + fr * 40, 4 + hash(k, 5) * 7); ctx.fill();
     }
     ctx.restore();
-    g = ctx.createLinearGradient(0, y, 0, y - 86);                            // 水舌：一笔光滑的深色
-    g.addColorStop(0, col(TH.deep, 0.6)); g.addColorStop(1, col(TH.deep, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.lineTo(q.x, y - 86); ctx.closePath(); ctx.fill();
-    ctx.lineCap = 'round';
-    for (let k = 0; k < 3; k++) {                                              // 水舌下方的几道浪：一团团翻起的白沫，越往下游越小
-      const wy = y - 98 - k * 26, ww = 30 - k * 6, wob = Math.sin(T * 6 + k * 2) * 1.5;
-      ctx.fillStyle = col(TH.deep, 0.2 - k * 0.05); oval(q.x, wy + 9, ww, 5); ctx.fill();
-      for (let j = -3; j <= 3; j++) {
-        const fx = q.x + j * ww / 3.4 + Math.sin(T * 4 + j + k) * 1.2, fy = wy + Math.abs(j) * 1.6 + wob;
-        ctx.fillStyle = `rgba(255,255,255,${(0.8 - k * 0.2) * (1 - Math.abs(j) * 0.16)})`; circle(fx, fy, 3.6 - k * 0.5 - Math.abs(j) * 0.35 + Math.sin(T * 7 + j * 2 + k) * 0.5); ctx.fill();
-      }
-    }
     { const lg = ctx.createLinearGradient(0, y - 1, 0, y + 9); lg.addColorStop(0, col(TH.deep, 0.55)); lg.addColorStop(1, col(TH.deep, 0)); ctx.fillStyle = lg; ctx.fillRect(xl, y - 1, xr - xl, 10); }      // 落差的边缘：水从这里翻下去，上沿暗一些
-    ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.lineWidth = 2.4;
-    for (const [x0, x1] of [[xl, a], [b, xr]]) { ctx.beginPath(); for (let x = x0; x <= x1; x += 9) ctx.lineTo(x, y - 0.5 + Math.sin(x * 0.4 + T * 7) * 1.2); ctx.stroke(); }
+    ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); for (let x = xl; x <= xr; x += 9) ctx.lineTo(x, y - 0.5 + Math.sin(x * 0.4 + T * 7) * 1.2); ctx.stroke();
+    // 水舌：一股没被打碎的水从缺口滑下去，把白水冲淡一道。边缘是虚的，慢慢融进两边的白沫里，得留心才看得出来
+    const tc = mixc(TH.water, TH.channel, 0.7);
+    for (let j = 0; j < 8; j++) {
+      const f = j / 7;
+      ctx.save(); ctx.translate(q.x + Math.sin(T * 3 + j) * 0.8 * f, y - 2 - f * 80); ctx.scale(q.half * (1 - f * 0.72) + 3, 15 - f * 4);
+      const tg = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); tg.addColorStop(0, col(tc, 0.62 - f * 0.3)); tg.addColorStop(0.55, col(tc, 0.38 - f * 0.18)); tg.addColorStop(1, col(tc, 0));
+      ctx.fillStyle = tg; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill(); ctx.restore();
+    }
+    for (let k = 0; k < 2; k++) for (let j = -2; j <= 2; j++) {              // 水舌尽头，水重新撞在一起，翻起一点白沫
+      const wy = y - 98 - k * 22, ww = 20 - k * 6;
+      ctx.fillStyle = `rgba(255,255,255,${(0.5 - k * 0.2) * (1 - Math.abs(j) * 0.2)})`;
+      circle(q.x + j * ww / 2.4 + Math.sin(T * 4 + j + k) * 1.2, wy + Math.abs(j) * 1.5 + Math.sin(T * 6 + k * 2) * 1.4, 2.6 - k * 0.5 - Math.abs(j) * 0.3 + Math.sin(T * 7 + j * 2 + k) * 0.4); ctx.fill();
+    }
   }
   // 急流：干笔飞白 + 一道道浪
   for (const [a, b] of BOOSTS) {
