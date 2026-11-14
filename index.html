@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#14261a">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d6f86'/%3E%3Crect x='10' y='5' width='12' height='22' rx='6' fill='%23f76707'/%3E%3Crect x='13' y='9' width='6' height='14' rx='3' fill='%232f3b42'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#ece4d1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f4eddd'/%3E%3Cpath d='M9 0q8 16-2 32h18q-8-16 2-32z' fill='%237dbfc0'/%3E%3Crect x='11.5' y='8' width='9' height='17' rx='4.5' fill='%23e46f51' stroke='%233b352d' stroke-width='1'/%3E%3Crect x='14' y='11.5' width='4' height='10' rx='2' fill='%235f6f76'/%3E%3C/svg%3E">
 <title>橡皮艇漂流</title>
 <meta name="description" content="划着橡皮艇顺流而下：躲礁石、绕漂木、冲急流、闯漩涡和跌水。浏览器里直接玩，支持键盘和触屏。">
 <meta property="og:title" content="橡皮艇漂流">
@@ -17,71 +17,81 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
-  html, body { margin: 0; height: 100%; background: #14261a; overflow: hidden; overscroll-behavior: none; }
+  :root { --paper: #f6f0e2; --ink: #3b352d; --ink2: #6f675b; --moss: #6f8f5a; --moss2: #55733f; --teal: #2f6f7a; --ochre: #a8741a; --verm: #b8452f; --line: rgba(59,53,45,.22);
+          --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "PingFang SC", serif;
+          --kai: "STKaiti", "KaiTi", "Kaiti SC", "LXGW WenKai", "Noto Serif SC", "Songti SC", "STSong", serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #e4dbc6; }
   body { box-sizing: border-box; -webkit-touch-callout: none;
+         background: radial-gradient(ellipse at 50% 38%, #f0e9d8, #dad0b9);
          padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   #loading, #rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
-                      padding: 24px; text-align: center; color: #9fd0dc; font-size: 16px; line-height: 1.7; }
-  #rotate { display: none; z-index: 10; background: #14261a; color: #e2f1f4; font-size: 18px; }
+                      padding: 24px; text-align: center; color: var(--ink2); font: 18px/1.7 var(--kai); letter-spacing: 2px; }
+  #rotate { display: none; z-index: 10; background: #ece4d1; color: var(--ink); }
   @media (orientation: landscape) and (max-height: 480px) and (pointer: coarse) { #rotate { display: flex; } }
-  body { display: flex; align-items: center; justify-content: center;
-         font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  body { display: flex; align-items: center; justify-content: center; font-family: var(--serif); color: var(--ink);
          -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
-  #wrap { position: relative; box-shadow: 0 0 40px rgba(0,0,0,.6); }
+  /* 画布像一张裱好的画：宽屏上四周留一圈白边 */
+  #wrap { position: relative; box-shadow: 0 10px 36px rgba(70,56,30,.26); }
+  @media (min-width: 700px) { #wrap { box-shadow: 0 0 0 9px #fbf8ef, 0 0 0 10px rgba(59,53,45,.2), 0 18px 46px rgba(70,56,30,.3); } }
   canvas { display: block; }
   #overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
-             background: rgba(8, 28, 36, .5); color: #fff; text-align: center; }
-  #overlay { transition: opacity .22s ease; }
+             background: rgba(244,238,224,.46); text-align: center; transition: opacity .22s ease; }
   #overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .22s ease, visibility 0s .22s; }
-  #panel { width: 80%; max-width: 340px; max-height: 94%; overflow-y: auto; box-sizing: border-box; padding: 22px 20px 20px; border-radius: 18px;
-           background: rgba(14, 44, 58, .93); border: 1.5px solid rgba(255,255,255,.22);
+  /* 面板是一张纸卡：细墨线边框，里面再套一道淡线 */
+  #panel { width: 82%; max-width: 344px; max-height: 94%; overflow-y: auto; box-sizing: border-box; padding: 26px 22px 20px; border-radius: 5px;
+           background: radial-gradient(ellipse at 30% 0%, #fffdf6, var(--paper) 70%); border: 1px solid rgba(59,53,45,.32);
+           outline: 1px solid rgba(59,53,45,.13); outline-offset: -7px; box-shadow: 0 14px 38px rgba(70,56,30,.3);
            animation: rise .3s ease-out; }
-  @keyframes rise { from { transform: translateY(18px) scale(.96); opacity: 0; } }
-  @keyframes pop { 0% { transform: scale(0) rotate(-40deg); } 70% { transform: scale(1.35) rotate(8deg); } 100% { transform: none; } }
-  #panel h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: 2px; }
-  #panel h2 { margin: 0 0 12px; font-size: 15px; font-weight: 500; color: #9fd0dc; }
-  #panel p { margin: 6px 0; font-size: 14px; line-height: 1.6; color: #e2f1f4; }
-  #panel .stars { font-size: 46px; letter-spacing: 6px; margin: 2px 0 6px; }
-  #panel .stars span { display: inline-block; }
-  #panel .stars .on { color: #ffd23f; text-shadow: 0 2px 0 #b8860b; animation: pop .45s backwards; animation-delay: calc(var(--i) * .32s + .25s); }
-  #panel .stars .off { color: rgba(255,255,255,.2); }
-  #panel .score { font-size: 34px; font-weight: 800; color: #ffe066; margin: 0; line-height: 1.2; }
-  #panel .stats { display: flex; justify-content: space-around; margin: 8px 0 6px; }
-  #panel .stats div { font-size: 12px; color: #9fd0dc; }
-  #panel .stats b { display: block; font-size: 19px; color: #fff; }
-  #panel .goals { text-align: left; display: inline-block; font-size: 13px; line-height: 1.75; color: #cfe6ea; }
-  #panel .goals .ok { color: #8ce99a; } #panel .goals .no { color: #ffa8a8; }
-  #panel kbd { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 5px;
-               background: #fff; color: #134; font: 600 13px/1.5 inherit; }
-  #panel .small { font-size: 12px; color: #9fd0dc; }
-  #panel .new { color: #ffe066; font-weight: 700; }
-  button { margin-top: 14px; padding: 12px 34px; font: 600 18px/1 inherit; color: #5a2d00; cursor: pointer;
-           background: linear-gradient(#ffd23f, #ff9f1c); border: 0; border-radius: 999px;
-           box-shadow: 0 4px 0 #b8600b; }
-  .btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 10px; }
+  @keyframes rise { from { transform: translateY(14px); opacity: 0; } }
+  @keyframes pop { 0% { transform: scale(0) rotate(-50deg); } 70% { transform: scale(1.25) rotate(6deg); } 100% { transform: none; } }
+  #panel h1 { margin: 0 0 6px; font: 600 33px/1.2 var(--kai); letter-spacing: 5px; text-indent: 5px; }
+  #panel h2 { margin: 0 0 14px; font-size: 13px; font-weight: 500; color: var(--ink2); letter-spacing: 2px; }
+  #panel h2::before, #panel h2::after { content: ''; display: inline-block; width: 22px; height: 1px; margin: 0 9px; vertical-align: middle; background: var(--line); }
+  #panel p { margin: 6px 0; font-size: 14px; line-height: 1.75; color: #4a443a; }
+  #panel .stars { margin: 0 0 4px; }
+  #panel .stars img { width: 50px; height: 50px; margin: 0 2px; }
+  #panel .stars .on { animation: pop .5s backwards; animation-delay: calc(var(--i) * .32s + .25s); }
+  #panel .off { filter: grayscale(1); opacity: .25; }
+  #panel .lt { width: 15px; height: 15px; vertical-align: -3px; }
+  #panel .score { margin: 0; font: 600 38px/1.15 var(--kai); color: var(--ochre); }
+  #panel .stats { display: flex; justify-content: space-around; margin: 10px 0 8px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  #panel .stats div { font-size: 12px; color: var(--ink2); }
+  #panel .stats b { display: block; font-size: 19px; color: var(--ink); }
+  #panel .goals { text-align: left; display: inline-block; font-size: 13px; line-height: 1.8; color: #4a443a; }
+  #panel .goals .ok { color: var(--moss2); } #panel .goals .no { color: var(--verm); }
+  #panel kbd { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: 4px; background: #fffdf6; color: var(--ink);
+               border: 1px solid rgba(59,53,45,.4); border-bottom-width: 2px; font: 600 12px/1.6 var(--serif); }
+  #panel .small { font-size: 12px; color: var(--ink2); }
+  #panel .new { color: var(--verm); font-weight: 700; }
+  button { margin-top: 14px; padding: 11px 34px; font: 600 19px/1 var(--kai); letter-spacing: 4px; text-indent: 4px; color: #fbf7ea; cursor: pointer;
+           background: linear-gradient(#7f9e68, #62824e); border: 1px solid #4f6b3f; border-radius: 7px;
+           box-shadow: 0 2px 0 #4a6439, 0 7px 16px rgba(70,90,50,.26); }
+  button:active { transform: translateY(2px); box-shadow: 0 0 0 #4a6439, 0 3px 8px rgba(70,90,50,.26); }
+  .btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 9px; }
   .btns #go { flex-basis: 100%; margin-left: 12%; margin-right: 12%; }
-  button.alt { padding: 9px 18px; font-size: 14px; color: #e2f1f4; background: rgba(255,255,255,.12); box-shadow: 0 3px 0 rgba(0,0,0,.3); margin-top: 12px; }
-  .lv { display: flex; flex-direction: column; gap: 2px; text-align: left; margin: 8px 0; padding: 10px 14px; border-radius: 12px; cursor: pointer;
-        background: rgba(255,255,255,.07); border: 1.5px solid rgba(255,255,255,.14); }
-  .lv b { font-size: 16px; } .lv span { font-size: 12px; color: #9fd0dc; }
+  button.alt { margin-top: 12px; padding: 8px 15px; font: 500 14px/1 var(--serif); letter-spacing: 1px; text-indent: 1px; color: var(--ink);
+               background: rgba(255,253,246,.75); border: 1px solid rgba(59,53,45,.36); box-shadow: 0 1px 0 rgba(59,53,45,.22); }
+  button.alt:active { box-shadow: none; }
+  .lv { display: flex; flex-direction: column; gap: 3px; text-align: left; margin: 8px 0; padding: 9px 13px; border-radius: 4px; cursor: pointer;
+        background: rgba(255,253,246,.55); border: 1px solid var(--line); border-left: 4px solid var(--c, #9ab58a); }
+  .lv b { font: 600 17px/1.3 var(--kai); letter-spacing: 1px; } .lv span { font-size: 12px; color: var(--ink2); }
+  .lv.sel { background: #fffdf6; border-color: rgba(59,53,45,.5); border-left-color: var(--c, #9ab58a); box-shadow: 0 4px 12px rgba(70,56,30,.16); }
+  .lv.locked { cursor: default; opacity: .5; }
+  .lock { display: inline-block; position: relative; width: 11px; height: 9px; margin-right: 7px; border-radius: 2px; background: var(--ink2); }
+  .lock::before { content: ''; position: absolute; left: 1.5px; top: -6px; width: 4px; height: 6px; border: 2px solid var(--ink2); border-bottom: 0; border-radius: 4px 4px 0 0; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 9px 0; font-size: 14px; text-align: left; }
-  .seg { display: flex; border-radius: 9px; overflow: hidden; border: 1.5px solid rgba(255,255,255,.22); flex-shrink: 0; }
-  button.opt { margin: 0; padding: 7px 11px; font-size: 13px; font-weight: 500; color: #cfe6ea; background: transparent; border-radius: 0; box-shadow: none; }
-  button.opt + button.opt { border-left: 1.5px solid rgba(255,255,255,.22); }
-  button.opt.on { color: #5a2d00; background: #ffd23f; font-weight: 700; }
-  button.opt.warn { color: #ffa8a8; }
+  .seg { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid rgba(59,53,45,.4); flex-shrink: 0; background: rgba(255,253,246,.6); }
+  button.opt { margin: 0; padding: 7px 11px; font: 500 13px/1 var(--serif); letter-spacing: 0; text-indent: 0; color: var(--ink2); background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+  button.opt + button.opt { border-left: 1px solid rgba(59,53,45,.3); }
+  button.opt.on { color: #fbf7ea; background: var(--moss); font-weight: 700; }
+  button.opt.warn { color: var(--verm); }
   button.opt:active { transform: none; box-shadow: none; }
-  .lv.locked { cursor: default; opacity: .55; }
-  .lock { display: inline-block; position: relative; width: 11px; height: 9px; margin-right: 7px; border-radius: 2px; background: #cfe6ea; }
-  .lock::before { content: ''; position: absolute; left: 1.5px; top: -6px; width: 4px; height: 6px; border: 2px solid #cfe6ea; border-bottom: 0; border-radius: 4px 4px 0 0; }
-  .lv.sel { background: rgba(255,210,63,.16); border-color: #ffd23f; }
-  button:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8600b; }
 </style>
 </head>
 <body>
 <div id="loading">正在准备河道…</div>
 <div id="rotate">请把手机竖过来玩</div>
-<noscript><div style="position:fixed;top:40%;left:0;right:0;text-align:center;color:#e2f1f4">这个游戏需要启用 JavaScript 才能运行。</div></noscript>
+<noscript><div style="position:fixed;top:40%;left:0;right:0;text-align:center;color:#3b352d">这个游戏需要启用 JavaScript 才能运行。</div></noscript>
 <div id="wrap">
   <canvas id="c"></canvas>
   <div id="overlay" class="hidden"><div id="panel"></div></div>
@@ -89,7 +99,7 @@
 <script>
 function main() {
 'use strict';
-const VERSION = '1.1.0';
+const VERSION = '2.0.0';
 
 // 旧版浏览器（如 iOS 15）没有 roundRect
 if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
@@ -108,7 +118,8 @@ const wrap = document.getElementById('wrap');
 const overlay = document.getElementById('overlay');
 const panel = document.getElementById('panel');
 const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const FONT = '-apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+const FONT = '"Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "PingFang SC", serif';
+const KAI = '"STKaiti", "KaiTi", "Kaiti SC", "LXGW WenKai", ' + FONT;       // 标题和画上的题字用楷体，找不到就退回宋体
 const TAU = Math.PI * 2;
 
 const chunks = new Map();     // 预渲染的地形分块
@@ -119,7 +130,8 @@ const saveCfg = () => { try { localStorage.setItem('raft_settings', JSON.stringi
 const SENS = [{ rate: 0.72, a: 0.5 }, { rate: 1, a: 0.6 }, { rate: 1.35, a: 0.72 }];
 function resize() {
   const cs = getComputedStyle(document.body), pad = k => parseFloat(cs['padding' + k]) || 0;       // 避开刘海和底部横条
-  const ww = Math.max(120, window.innerWidth - pad('Left') - pad('Right')), wh = Math.max(160, window.innerHeight - pad('Top') - pad('Bottom'));
+  const mat = window.innerWidth >= 700 ? 24 : 0;                // 宽屏上给画四周的白边留出位置
+  const ww = Math.max(120, window.innerWidth - pad('Left') - pad('Right') - mat), wh = Math.max(160, window.innerHeight - pad('Top') - pad('Bottom') - mat);
   H = Math.max(640, Math.min(1100, Math.round(W * wh / ww)));
   const scale = Math.min(ww / W, wh / H);
   // 渲染分辨率封顶：精细最多 2 倍逻辑分辨率，流畅不超过 1 倍，避免高分屏上白白多画像素
@@ -151,9 +163,14 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
 
-// ---------- 程序化贴图 ----------
+// ---------- 画材：纸、颜料与笔触 ----------
+// 整个画面按水彩来画：颜色是薄薄地罩在纸上的，影子用冷紫灰而不是黑色，轮廓用断续的墨线勾。
 const TS = 256;
 const SUN = [6, 9];             // 影子偏移（阳光来自左上）
+const PAPER = '#f4eddd', INK = '#3b352d';
+const col = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const ink = a => `rgba(59,53,45,${a})`, paperA = a => `rgba(247,241,227,${a})`;
+const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 function makeFbm(p0, oct, seed) {            // 可平铺的分形噪声，输入 0..1
   const rnd = mulberry32(seed), grids = [];
   for (let o = 0; o < oct; o++) { const p = p0 << o, g = new Float32Array(p * p); for (let i = 0; i < g.length; i++) g[i] = rnd(); grids.push([p, g]); }
@@ -173,8 +190,8 @@ function makeTex(fn, after) {
   const c = document.createElement('canvas'); c.width = c.height = TS;
   const g = c.getContext('2d'), img = g.createImageData(TS, TS), px = img.data;
   for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-    const col = fn(x / TS, y / TS), i = (y * TS + x) * 4;
-    px[i] = col[0]; px[i + 1] = col[1]; px[i + 2] = col[2]; px[i + 3] = col[3] === undefined ? 255 : col[3];
+    const v = fn(x / TS, y / TS), i = (y * TS + x) * 4;
+    px[i] = v[0]; px[i + 1] = v[1]; px[i + 2] = v[2]; px[i + 3] = v[3] === undefined ? 255 : v[3];
   }
   g.putImageData(img, 0, 0);
   if (after) after(g);
@@ -186,98 +203,138 @@ function wrapDraw(g, x, y, r, fn) {           // 跨边界的元素重复绘制�
     fn(x + ox, y + oy);
   }
 }
+// 一团水彩：中间通透，靠近边缘颜料沉积略深，最外一圈晕开
+function washBlob(g, x, y, r, c, a) {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, col(c, a * 0.8)); gr.addColorStop(0.6, col(c, a * 0.86));
+  gr.addColorStop(0.86, col([c[0] * 0.82, c[1] * 0.82, c[2] * 0.86], a)); gr.addColorStop(1, col(c, 0));
+  g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+}
+// 一笔：两头尖、中间宽，可以带一点弧度
+function brush(g, x0, y0, x1, y1, w, bend = 0) {
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+  g.beginPath(); g.moveTo(x0, y0);
+  g.quadraticCurveTo(mx + nx * (bend + w), my + ny * (bend + w), x1, y1);
+  g.quadraticCurveTo(mx + nx * (bend - w), my + ny * (bend - w), x0, y0); g.fill();
+}
 const TEX = (() => {
-  const f1 = makeFbm(4, 4, 11), f2 = makeFbm(32, 2, 12), f3 = makeFbm(11, 3, 13), f4 = makeFbm(18, 2, 14), f5 = makeFbm(6, 4, 15), rnd = mulberry32(99);
-  const grass = makeTex((u, v) => {
-    const t = clamp(f1(u, v) * 1.5 - 0.25 + (f2(u, v) - 0.5) * 0.45, 0, 1);
-    return [lerp(58, 122, t), lerp(92, 156, t), lerp(42, 72, t)];
-  }, g => {
-    for (let i = 0; i < 1500; i++) {
-      const x = rnd() * TS, y = rnd() * TS, l = 2 + rnd() * 4;
-      g.strokeStyle = rnd() < 0.5 ? 'rgba(160,196,96,.28)' : 'rgba(34,66,30,.3)'; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 3, y - l); g.stroke();
+  const f1 = makeFbm(4, 4, 11), f2 = makeFbm(32, 2, 12), f3 = makeFbm(6, 3, 13), f4 = makeFbm(9, 3, 14), rnd = mulberry32(99), blank = () => [0, 0, 0, 0];
+  const paper = makeTex((u, v) => { const k = 238 + f1(u, v) * 12 + (f2(u, v) - 0.5) * 9; return [k, k - 3, k - 11]; }, g => {
+    for (let i = 0; i < 420; i++) {           // 纸的纤维
+      const x = rnd() * TS, y = rnd() * TS, a = rnd() * TAU, l = 3 + rnd() * 9;
+      g.strokeStyle = rnd() < 0.6 ? 'rgba(120,100,70,.09)' : 'rgba(255,255,255,.35)'; g.lineWidth = 0.7;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
     }
   });
-  const gravel = makeTex((u, v) => {
-    const t = f5(u, v) + (f2(u, v) - 0.5) * 0.5;
-    return [lerp(142, 196, t), lerp(128, 180, t), lerp(100, 146, t)];
-  }, g => {
-    for (let i = 0; i < 420; i++) {
-      const x = rnd() * TS, y = rnd() * TS, r = 1 + rnd() * 2.6, sh = 110 + rnd() * 110 | 0;
-      wrapDraw(g, x, y, 4, (px, py) => {
-        g.fillStyle = 'rgba(40,34,24,.35)'; g.beginPath(); g.ellipse(px + 0.7, py + 0.9, r, r * 0.75, 0, 0, TAU); g.fill();
-        g.fillStyle = `rgb(${sh},${sh - 6},${sh - 20})`; g.beginPath(); g.ellipse(px, py, r, r * 0.75, 0, 0, TAU); g.fill();
-      });
+  const bloom = makeTex((u, v) => [255, 252, 244, smooth(0.5, 0.78, f3(u, v)) * 120]);          // 留白般的浅色晕
+  const shade = makeTex((u, v) => [52, 70, 84, smooth(0.52, 0.8, f4(u, v)) * 62]);              // 颜料聚集的深色晕
+  const grain = makeTex((u, v) => [70, 70, 80, Math.max(0, f2(u, v) - 0.6) * 150]);             // 颗粒沉淀
+  const streak = makeTex(blank, g => {        // 水面上顺流的留白笔触
+    g.fillStyle = '#fff';
+    for (let i = 0; i < 64; i++) {
+      const x = rnd() * TS, y = rnd() * TS, l = 12 + rnd() * rnd() * 70, w = 0.5 + rnd() * 1.1, b = (rnd() - 0.5) * 5;
+      g.globalAlpha = 0.25 + rnd() * 0.6;
+      wrapDraw(g, x, y, 90, (px, py) => brush(g, px, py, px + b, py + l, w, b * 0.4));
     }
+    g.globalAlpha = 1;
   });
-  const bed = makeTex((u, v) => { const t = f5(u, v); return [lerp(52, 84, t), lerp(62, 92, t), lerp(50, 70, t)]; }, g => {
-    for (let i = 0; i < 300; i++) {
-      const x = rnd() * TS, y = rnd() * TS, r = 3 + rnd() * 8, rot = rnd() * 3, sh = 80 + rnd() * 80 | 0, warm = rnd() * 22 | 0;
-      wrapDraw(g, x, y, 12, (px, py) => {
-        g.fillStyle = 'rgba(16,24,22,.55)'; g.beginPath(); g.ellipse(px + 1.5, py + 2, r, r * 0.7, rot, 0, TAU); g.fill();
-        g.fillStyle = `rgb(${sh + warm},${sh + warm * 0.5 | 0},${sh - 8})`; g.beginPath(); g.ellipse(px, py, r, r * 0.7, rot, 0, TAU); g.fill();
-        g.fillStyle = 'rgba(255,255,255,.14)'; g.beginPath(); g.ellipse(px - r * 0.25, py - r * 0.2, r * 0.45, r * 0.28, rot, 0, TAU); g.fill();
-      });
+  const foam = makeTex((u, v) => [255, 255, 255, clamp((f1(u, v) * 0.55 + f4(v, u) * 0.45 + (f2(u, v) - 0.5) * 0.5 - 0.5) * 8, 0, 1) * 225], g => {    // 急流里的干笔飞白
+    g.fillStyle = '#fff';
+    for (let i = 0; i < 90; i++) {
+      const x = rnd() * TS, y = rnd() * TS, l = 8 + rnd() * 30, b = (rnd() - 0.5) * 6, w = 0.8 + rnd() * 1.6;
+      g.globalAlpha = 0.3 + rnd() * 0.6;
+      wrapDraw(g, x, y, 50, (px, py) => brush(g, px, py, px + b, py + l, w));
     }
+    g.globalAlpha = 1;
   });
-  const autumn = makeTex((u, v) => {      // 秋天的草地：发黄，落满红叶
-    const t = clamp(f1(u, v) * 1.5 - 0.25 + (f2(u, v) - 0.5) * 0.45, 0, 1);
-    return [lerp(84, 156, t), lerp(80, 136, t), lerp(36, 60, t)];
-  }, g => {
-    for (let i = 0; i < 900; i++) {
-      g.fillStyle = ['rgba(204,96,28,.75)', 'rgba(172,48,30,.7)', 'rgba(226,170,48,.75)', 'rgba(60,70,30,.4)'][i & 3];
-      g.beginPath(); g.ellipse(rnd() * TS, rnd() * TS, 1 + rnd() * 1.6, 0.7 + rnd(), rnd() * 3, 0, TAU); g.fill();
-    }
-  });
-  const cliff = makeTex((u, v) => {      // 峡谷岩面：带层理的褐灰色岩石
-    const n = f1(u, v), t = clamp(n * 1.2 - 0.1 + Math.sin((v * 9 + n * 2.2) * TAU) * 0.1 + (f2(u, v) - 0.5) * 0.35, 0, 1);
-    return [lerp(84, 164, t), lerp(72, 142, t), lerp(60, 112, t)];
-  }, g => {
-    for (let i = 0; i < 70; i++) {
-      let x = rnd() * TS, y = rnd() * TS; g.strokeStyle = 'rgba(30,22,14,.4)'; g.lineWidth = 0.8 + rnd(); g.beginPath(); g.moveTo(x, y);
-      for (let k = 0; k < 4; k++) { x += (rnd() - 0.3) * 16; y += (rnd() - 0.5) * 9; g.lineTo(x, y); } g.stroke();
-    }
-    for (let i = 0; i < 260; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(76,104,52,.3)' : 'rgba(200,186,160,.25)'; g.beginPath(); g.arc(rnd() * TS, rnd() * TS, 1 + rnd() * 2.5, 0, TAU); g.fill(); }
-  });
-  const ridge = (f, pw) => (u, v) => { const r = 1 - Math.abs(2 * f(u, v) - 1); return [255, 255, 255, Math.pow(r, pw) * 255]; };
-  return { grass, autumn, cliff, gravel, bed, ripA: makeTex(ridge(f3, 7)), ripB: makeTex(ridge(f4, 26)), foam: makeTex((u, v) => {
-    const a = clamp((f5(u, v) + (f2(u, v) - 0.5) * 0.6 - 0.5) * 6, 0, 1); return [255, 255, 255, a * 255]; }) };
+  return { paper, bloom, shade, grain, streak, foam };
 })();
 const PAT = {};
 for (const k in TEX) PAT[k] = ctx.createPattern(TEX[k], 'repeat');
 
-// 树冠贴图：由许多受光的叶团叠成
+// 预先画好的小画片（两倍分辨率，放大也清楚）
+function sprite(size, paint) {
+  const c = document.createElement('canvas'); c.width = c.height = size * 2;
+  const g = c.getContext('2d'); g.scale(2, 2); g.translate(size / 2, size / 2); g.lineCap = g.lineJoin = 'round'; paint(g);
+  return c;
+}
+// 树：从正上方看到的树冠，用几层透明的色块叠出来
+const TREE = 112;
 const TREES = (() => {
-  const out = [], rnd = mulberry32(7), L = [-0.62, -0.78];
-  const pal = [[[22, 58, 26], [58, 118, 44], [150, 190, 92]], [[30, 62, 22], [84, 128, 42], [176, 198, 96]], [[16, 48, 30], [40, 98, 52], [120, 170, 100]],
-    [[112, 46, 14], [198, 98, 24], [246, 172, 62]], [[98, 24, 18], [180, 50, 30], [234, 112, 62]], [[122, 86, 16], [206, 162, 38], [248, 216, 98]]];      // 后三组是秋色
-  for (let v = 0; v < 9; v++) {
-    const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.translate(48, 48);
-    const p = pal[v < 5 ? v % 3 : 3 + (v - 5) % 3];
-    if (v === 4) {      // 针叶树：放射状
-      for (let ring = 0; ring < 4; ring++) {
-        const R = 32 - ring * 8, n = 13 - ring * 2, t = ring / 3;
-        g.fillStyle = `rgb(${lerp(14, 60, t)},${lerp(44, 110, t)},${lerp(30, 58, t)})`;
-        g.beginPath();
-        for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * TAU + ring * 0.4, rr = i % 2 ? R * 0.55 : R; g.lineTo(Math.cos(a) * rr - ring * 1.5, Math.sin(a) * rr - ring * 1.8); }
-        g.closePath(); g.fill();
-      }
-    } else {
-      const blobs = [];
-      for (let i = 0; i < 46; i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * 27; blobs.push([Math.cos(a) * d, Math.sin(a) * d, 6 + rnd() * 8]); }
-      blobs.sort((a, b) => (b[0] * L[0] + b[1] * L[1]) - (a[0] * L[0] + a[1] * L[1])).reverse();
-      for (const [x, y, r] of blobs) {
-        const t = clamp(0.5 + (x * L[0] + y * L[1]) / 44 + (rnd() - 0.5) * 0.3, 0, 1);
-        const a = t < 0.5 ? p[0] : p[1], b = t < 0.5 ? p[1] : p[2], k = t < 0.5 ? t * 2 : t * 2 - 1;
-        g.fillStyle = `rgb(${lerp(a[0], b[0], k) | 0},${lerp(a[1], b[1], k) | 0},${lerp(a[2], b[2], k) | 0})`;
-        g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
-        g.fillStyle = 'rgba(255,255,220,.08)'; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.35, r * 0.5, 0, TAU); g.fill();
+  const rnd = mulberry32(7);
+  const leafy = (dark, mid, light, o = {}) => sprite(TREE, g => {
+    if (o.branches) {                         // 花树：先画几根枝条，花开在枝上
+      g.strokeStyle = 'rgba(84,58,46,.62)';
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * TAU + rnd(), l = 20 + rnd() * 12; g.lineWidth = 1.7;
+        g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(Math.cos(a + 0.45) * l * 0.5, Math.sin(a + 0.45) * l * 0.5, Math.cos(a) * l, Math.sin(a) * l); g.stroke();
       }
     }
-    out.push(c);
-  }
-  return out;
+    for (let i = 0; i < 7; i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * 15; washBlob(g, Math.cos(a) * d, Math.sin(a) * d, 15 + rnd() * 8, mid, o.thin ? 0.42 : 0.56); }
+    for (let i = 0; i < 9; i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * 22; washBlob(g, Math.cos(a) * d + 4, Math.sin(a) * d + 5, 6 + rnd() * 6, dark, 0.42); }
+    for (let i = 0; i < 11; i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * 23; washBlob(g, Math.cos(a) * d - 5, Math.sin(a) * d - 6, 6 + rnd() * 7, light, 0.5); }
+    for (let i = 0; i < (o.specks || 6); i++) {     // 零星的亮点；花树则是飘到外面的花瓣
+      const a = rnd() * TAU, d = 6 + rnd() * (o.specks ? 32 : 20);
+      g.fillStyle = col(light, 0.8); g.beginPath(); g.arc(Math.cos(a) * d - 3, Math.sin(a) * d - 4, 0.9 + rnd() * 1.5, 0, TAU); g.fill();
+    }
+  });
+  const pine = (dark, light) => sprite(TREE, g => {      // 松：一圈圈向外放射的笔触
+    for (const [R, n, t] of [[32, 15, 0], [24, 12, 0.45], [15, 9, 0.9]]) {
+      g.fillStyle = col(mixc(dark, light, t), 0.8);
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU + rnd() * 0.3, r1 = R * (0.85 + rnd() * 0.25), ox = -t * 2, oy = -t * 2.5;
+        brush(g, Math.cos(a) * R * 0.15 + ox, Math.sin(a) * R * 0.15 + oy, Math.cos(a) * r1 + ox, Math.sin(a) * r1 + oy, 2.6 + (1 - t) * 1.4, (rnd() - 0.5) * 3);
+      }
+    }
+    g.fillStyle = col(light, 0.85); g.beginPath(); g.arc(-2, -2.5, 2.2, 0, TAU); g.fill();
+  });
+  const willow = (c1, c2) => sprite(TREE, g => {         // 柳：垂下来的细枝
+    washBlob(g, 0, 0, 30, c2, 0.3);
+    for (let i = 0; i < 30; i++) {
+      const a = i / 30 * TAU + rnd() * 0.2, l = 22 + rnd() * 12; g.fillStyle = col(i % 3 ? c1 : c2, 0.62);
+      brush(g, Math.cos(a) * 3, Math.sin(a) * 3, Math.cos(a + 0.25) * l, Math.sin(a + 0.25) * l, 1.5, 3);
+    }
+  });
+  return [
+    leafy([70, 120, 72], [128, 176, 104], [196, 220, 140]),                               // 0 新绿
+    leafy([92, 132, 62], [158, 190, 98], [222, 228, 150]),                                // 1 黄绿
+    leafy([48, 96, 74], [92, 148, 112], [160, 204, 160]),                                 // 2 深绿
+    leafy([206, 110, 140], [240, 170, 188], [252, 226, 232], { branches: 1, specks: 16, thin: 1 }),   // 3 桃花
+    pine([42, 82, 66], [112, 158, 116]),                                                  // 4 松
+    leafy([176, 84, 34], [228, 140, 60], [248, 200, 112]),                                // 5 橙枫
+    leafy([150, 48, 44], [212, 88, 66], [240, 150, 110]),                                 // 6 红枫
+    leafy([176, 128, 40], [228, 188, 84], [250, 230, 150]),                               // 7 金叶
+    leafy([96, 112, 58], [150, 160, 90], [204, 204, 140]),                                // 8 秋天还没黄的树
+    willow([150, 186, 96], [200, 220, 140]),                                              // 9 柳
+    pine([44, 66, 78], [110, 140, 146]),                                                  // 10 峡谷里的苍松
+    leafy([226, 160, 176], [250, 224, 230], [255, 250, 248], { branches: 1, specks: 16, thin: 1 }),   // 11 梨花
+  ];
 })();
+// 莲花（沿途收集的东西）和救生圈
+const LOTUS = sprite(44, g => {
+  g.fillStyle = 'rgba(92,150,104,.94)'; g.beginPath(); g.moveTo(1, 2); g.arc(1, 2, 17, 0.5, TAU - 0.12); g.closePath(); g.fill();     // 荷叶
+  g.strokeStyle = 'rgba(44,88,66,.6)'; g.lineWidth = 1; g.stroke();
+  washBlob(g, -5, -4, 10, [206, 232, 172], 0.4);
+  g.strokeStyle = 'rgba(222,240,204,.55)'; g.lineWidth = 0.7;
+  for (let i = 0; i < 7; i++) { const a = 0.85 + i * 0.76; g.beginPath(); g.moveTo(1, 2); g.lineTo(1 + Math.cos(a) * 15, 2 + Math.sin(a) * 15); g.stroke(); }
+  const petal = (a, l, w, c0, c1) => {
+    g.save(); g.rotate(a); const gr = g.createLinearGradient(0, 0, 0, -l); gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+    g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(w, -l * 0.45, 0, -l); g.quadraticCurveTo(-w, -l * 0.45, 0, 0);
+    g.fillStyle = gr; g.fill(); g.strokeStyle = 'rgba(176,84,112,.5)'; g.lineWidth = 0.6; g.stroke(); g.restore();
+  };
+  for (let i = 0; i < 8; i++) petal(i * TAU / 8, 12, 4.6, '#fde6ea', '#ee8fa9');
+  for (let i = 0; i < 6; i++) petal(i * TAU / 6 + 0.4, 8, 3.5, '#fffaf8', '#f9c9d4');
+  g.fillStyle = '#f0c24a'; g.beginPath(); g.arc(0, 0, 2.7, 0, TAU); g.fill();
+  g.fillStyle = '#c98f1f'; for (let i = 0; i < 5; i++) { g.beginPath(); g.arc(Math.cos(i * 1.26) * 1.5, Math.sin(i * 1.26) * 1.5, 0.5, 0, TAU); g.fill(); }
+});
+const LOTUS_URL = LOTUS.toDataURL();
+const RING = sprite(44, g => {
+  g.lineCap = 'butt'; g.lineWidth = 7.6; g.strokeStyle = '#f6efdf'; g.beginPath(); g.arc(0, 0, 11, 0, TAU); g.stroke();
+  g.strokeStyle = '#cf6a4c'; for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(0, 0, 11, i * Math.PI / 2, i * Math.PI / 2 + 0.72); g.stroke(); }
+  g.lineWidth = 2.4; g.strokeStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.arc(0, 0, 12.4, Math.PI * 1.05, Math.PI * 1.55); g.stroke();
+  g.strokeStyle = 'rgba(80,50,60,.2)'; g.beginPath(); g.arc(0, 0, 9.6, 0.1, Math.PI * 0.6); g.stroke();
+  g.lineWidth = 1; g.strokeStyle = ink(0.55); g.beginPath(); g.arc(0, 0, 14.8, 0, TAU); g.stroke(); g.beginPath(); g.arc(0, 0, 7.2, 0, TAU); g.stroke();
+});
 
 // ---------- 关卡 ----------
 // 坐标：x 横向，d 为顺流距离（屏幕向上）。
@@ -287,17 +344,17 @@ const tSteer = isTouch ? '按住屏幕左侧 / 右侧  划桨转向' : '←  →
 const tSprint = isTouch ? '按住中间按钮  冲刺' : '按住空格  冲刺（消耗体力）';
 const LEVELS = [
   { id: 1, name: '青溪谷', theme: 'forest', seed: 20261112, end: 9000, flow: 85, par: 60, w0: 118,
-    intro: '沿着星星走，避开礁石与漂木。',
+    intro: '春天的溪谷。沿着莲花走，避开礁石与漂木。',
     cx: d => W / 2 + 60 * smooth(200, 900, d) * (Math.sin(d / 610) * 0.7 + Math.sin(d / 233 + 2) * 0.3),
     w: d => 118 + 14 * Math.sin(d / 400) - 14 * smooth(3000, 3600, d) * (1 - smooth(4600, 5200, d)),
     safe: d => 0.55 * Math.sin(d / 520 + 1) * smooth(300, 1000, d),
     rockStart: 1000, gap: [210, 95, 190], clear: 50, logLen: 26, logPad: 14, gates: [], gateGap: 52, whirls: [], drops: [], music: [[C, 0], [A, 1], [F, 0], [G, 0]],
     boosts: [[3300, 3900], [5900, 6400], [7700, 8500]], bridges: [2695, 6595],
     logs: [5250, 5650, 6700, 7300], rings: [4570, 7450], ducks: [[620, -1], [2130, 1], [4230, -1], [5460, 1], [8640, -1]],
-    signs: [[120, tSteer], [470, isTouch ? '两侧同时按住  划桨前进' : '按 ↑ 划桨前进'], [820, '沿着星星走，避开礁石！'], [1400, tSprint],
+    signs: [[120, tSteer], [470, isTouch ? '两侧同时按住  划桨前进' : '按 ↑ 划桨前进'], [820, '沿着莲花走，避开礁石'], [1400, tSprint],
       [3180, '前方急流！'], [4420, '救生圈可以补气'], [5080, '漂木顺流而下，从旁边绕过去'], [7560, '最后冲刺！']] },
   { id: 2, name: '鹰嘴峡', theme: 'canyon', seed: 7302119, end: 11000, flow: 96, par: 60, w0: 104,
-    intro: '峡谷更窄、水更急，还有会把艇吸进去的漩涡。',
+    intro: '雾里的峡谷。更窄、更急，还有会把艇吸进去的漩涡。',
     cx: d => W / 2 + 78 * smooth(200, 800, d) * (Math.sin(d / 470) * 0.72 + Math.sin(d / 190 + 1) * 0.28),
     w: d => 104 + 12 * Math.sin(d / 330 + 1) - 10 * smooth(6000, 6500, d) * (1 - smooth(8200, 8700, d)),
     safe: d => 0.5 * Math.sin(d / 430 + 2) * smooth(300, 900, d),
@@ -307,7 +364,7 @@ const LEVELS = [
     signs: [[100, '鹰嘴峡：河道更窄，水流更急'], [850, '漩涡会把艇吸过去——绕开，或冲刺甩脱'], [2020, '石门：从缺口穿过去'],
       [3420, '长急流，稳住方向！'], [4700, '连环漩涡'], [8620, '最后一段险滩！']] },
   { id: 3, name: '落霞滩', theme: 'autumn', seed: 55120803, end: 12000, flow: 104, par: 62, w0: 122,
-    intro: '夕阳下的大水：一级级跌水，要对准水舌冲下去。',
+    intro: '秋天的傍晚。一级级跌水，要对准水舌冲下去。',
     cx: d => W / 2 + 68 * smooth(200, 800, d) * (Math.sin(d / 540 + 0.5) * 0.65 + Math.sin(d / 210 + 3) * 0.35),
     w: d => 122 + 12 * Math.sin(d / 360 + 2),
     safe: d => 0.55 * Math.sin(d / 470 + 4) * smooth(300, 900, d),
@@ -319,12 +376,24 @@ const LEVELS = [
       [6050, '连环漩涡'], [9150, '连续险滩，稳住！'], [10720, '最后一道跌水！']] },
 ];
 const THEMES = {
-  forest: { ground: 'grass', treeSkip: 0.14, kinds: [0, 1, 2, 3, 4], flowers: true, reeds: 0.5, cliff: 0, shrub: ['#3d7a30', '#69a544'], leaf: 0.28, sun: 1, grade: null,
-    tint: 'rgba(64,142,128,.5)', depth: ['rgba(46,124,122,.45)', 'rgba(34,108,116,.5)', 'rgba(26,92,108,.5)', 'rgba(20,78,98,.5)', 'rgba(15,66,88,.45)', 'rgba(12,58,80,.35)'] },
-  canyon: { ground: 'cliff', treeSkip: 0.62, kinds: [4, 4, 2], flowers: false, reeds: 0.16, cliff: 1, shrub: null, leaf: 0.08, sun: 1, grade: null,
-    tint: 'rgba(52,118,112,.55)', depth: ['rgba(38,104,108,.5)', 'rgba(28,90,104,.5)', 'rgba(20,76,96,.55)', 'rgba(14,62,86,.55)', 'rgba(10,50,76,.5)', 'rgba(8,42,66,.4)'] },
-  autumn: { ground: 'autumn', treeSkip: 0.12, kinds: [5, 6, 7, 8, 5, 6, 4], flowers: false, reeds: 0.42, cliff: 0, shrub: ['#8a561c', '#cf8e2e'], leaf: 0.6, sun: 1.6, grade: 'rgba(255,146,64,.09)',
-    tint: 'rgba(72,132,122,.5)', depth: ['rgba(50,118,116,.45)', 'rgba(38,102,110,.5)', 'rgba(30,86,102,.5)', 'rgba(24,72,92,.5)', 'rgba(18,60,82,.45)', 'rgba(14,52,74,.35)'] },
+  // 春天的早晨：新绿、桃花、青碧的水
+  forest: { accent: '#8fb07a', ground: [170, 198, 130], groundB: [108, 152, 96], groundC: [214, 208, 140], sand: [230, 212, 172], wet: [170, 150, 116],
+    water: [150, 208, 198], deep: [30, 92, 118], channel: [34, 110, 138], glaze: null,
+    rock: [[212, 208, 204], [142, 140, 152], [84, 84, 106]], shadow: 'rgba(58,72,108,', tuft: [72, 116, 70], flowers: ['#ffffff', '#f6d365', '#f3a9bd', '#c9a3e0'],
+    kinds: [0, 1, 2, 0, 1, 9, 3, 3, 11, 4], treeSkip: 0.14, reeds: 0.5, cliff: 0, shrub: [[92, 142, 84], [168, 204, 120]], leaf: 0.3, fleck: ['#f3a9bd', '#fbe3e8', '#f6d9e0'],
+    fall: 'petal', mist: 0, sun: 1, grade: null },
+  // 雾里的峡谷：青灰的岩壁、苍松、深靛的水
+  canyon: { accent: '#7f93a8', ground: [184, 178, 170], groundB: [122, 124, 140], groundC: [208, 190, 162], sand: [210, 202, 188], wet: [140, 136, 134],
+    water: [140, 190, 198], deep: [26, 62, 100], channel: [26, 74, 116], glaze: null,
+    rock: [[204, 208, 214], [124, 132, 152], [70, 78, 104]], shadow: 'rgba(52,60,98,', tuft: [84, 104, 88], flowers: null,
+    kinds: [10, 10, 4, 10, 2], treeSkip: 0.58, reeds: 0.16, cliff: 1, shrub: null, leaf: 0.06, fleck: ['#d7c9a0', '#b9c2a2', '#ffffff'],
+    fall: null, mist: 1, sun: 1, grade: 'rgba(120,150,190,.05)' },
+  // 秋天的傍晚：金黄的草、红枫、映着晚霞的水
+  autumn: { accent: '#d08a4e', ground: [222, 194, 130], groundB: [176, 134, 86], groundC: [236, 164, 104], sand: [234, 210, 168], wet: [176, 146, 110],
+    water: [150, 204, 196], deep: [40, 86, 118], channel: [38, 104, 134], glaze: [255, 170, 118],
+    rock: [[218, 204, 194], [152, 134, 138], [96, 78, 98]], shadow: 'rgba(96,64,112,', tuft: [150, 110, 60], flowers: ['#e8a23c', '#c9553d', '#f4d58d'],
+    kinds: [5, 6, 7, 5, 6, 8, 4], treeSkip: 0.12, reeds: 0.42, cliff: 0, shrub: [[166, 104, 50], [226, 162, 76]], leaf: 0.6, fleck: ['#d98a1e', '#b8432a', '#e3b83a'],
+    fall: 'leaf', mist: 0, sun: 1.6, grade: 'rgba(255,150,80,.07)' },
 };
 let LV, TH, END, BASE_FLOW, PAR_TIME, BOOSTS, BRIDGES, SIGNS, STOPS;
 function setLevel(i) {
@@ -339,7 +408,7 @@ const riverCx = d => LV.cx(d);
 const riverW = d => LV.w(d);
 const riverSlope = d => (riverCx(d + 4) - riverCx(d - 4)) / 8;
 const edgeX = (d, s) => riverCx(d) + s * (riverW(d) + 3 + 3 * Math.sin(d * 0.045 + s) + 2 * Math.sin(d * 0.113 + s * 2.3));   // 仅用于绘制的不规则河岸
-// 安全航线：星星沿此摆放，礁石避开它，保证关卡可通过
+// 安全航线：莲花沿此摆放，礁石避开它，保证关卡可通过
 const safeX = d => riverCx(d) + riverW(d) * LV.safe(d);
 // 主流线：弯道处水流被甩向外侧河岸，那里更深也更急
 const thal = d => clamp(-(riverCx(d + 12) - 2 * riverCx(d) + riverCx(d - 12)) / 144 * 1100, -0.42, 0.42);
@@ -578,7 +647,7 @@ function splash(x, d, n, color = '#fff', sp = 130, up = 1) {
     particles.push({ x, d, vx: Math.cos(an) * s, vd: Math.sin(an) * s, life: 0.5 + Math.random() * 0.4, max: 0.9, r: 1.2 + Math.random() * 2.3, color, z: 0, vz: (50 + Math.random() * 120) * up });
   }
 }
-function floatText(text, x, d, color = '#fff', size = 16) { floaters.push({ text, x, d, color, size, life: 1 }); }
+function floatText(text, x, d, color = INK, size = 16) { floaters.push({ text, x, d, color, size, life: 1 }); }
 
 // 碰到障碍：橡皮艇会弹开并被撞得打转；同一障碍在分开前不会重复扣血
 function collide(obj, nx, nd, lever = 0) {
@@ -603,7 +672,7 @@ function hurt(obj, nx, nd) {
   hud.fx.push({ kind: 'heart', i: raft.hp, t: 0 });
   ripple(raft.x, raft.d, 62, 1.1, 0.6, 14); ripple(raft.x, raft.d, 38, 0.8, 0.5, 8);
   splash(raft.x - nx * RAFT_R, raft.d - nd * RAFT_R, 22, 'rgba(255,255,255,.9)', 170);
-  floatText('-1', raft.x, raft.d + 24, '#ff8787', 20);
+  floatText('-1', raft.x, raft.d + 24, VERMILION, 20);
   sfx.hit();
   if (raft.hp <= 0) { state = 'dead'; sfx.dead(); setTimeout(showDead, 1300); }
 }
@@ -617,7 +686,7 @@ function strokeSide(key, active, dir, dt, s) {
   const before = ph; ph += STROKE_RATE * strokeMul * dt;
   if (before < 0.04 && ph >= 0.04) {           // 入水
     const c = Math.cos(raft.a), si = Math.sin(raft.a), dd = raft[key === 'phL' ? 'dirL' : 'dirR'];
-    for (const ly of [-16 * dd, -2 * dd]) { const bx = raft.x + s * 25 * c + ly * si, bd = raft.d - s * 25 * si - ly * c; splash(bx, bd, 3, 'rgba(255,255,255,.85)', 50); ripple(bx, bd, 13, 0.7, 0.42); }
+    for (const ly of [-16 * dd, -2 * dd]) { const bx = raft.x + s * 25 * c + ly * si, bd = raft.d - s * 25 * si - ly * c; splash(bx, bd, 3, 'rgba(255,255,255,.85)', 50); ripple(bx, bd, 12, 0.6, 0.3); }
   }
   if (ph >= 1) { ph = active ? ph - 1 : 0; if (active) raft[key === 'phL' ? 'dirL' : 'dirR'] = dir; }
   raft[key] = ph;
@@ -752,7 +821,7 @@ function update(dt) {
   // 被回流卷住：艇被按在落差下面乱转，时间一长就会被拍一下再吐出去
   const pinned = raft.vd < 60 && drops.some(q => raft.d - q.d > -18 && raft.d - q.d <= 0 && Math.abs(raft.x - q.x) >= q.half);      // 被顶在落差边缘也算
   if ((FLOW.hole > 0.05 || pinned && raft.hole > 0) && playing) {
-    if (raft.hole === 0) { floatText('卷入回流！', raft.x, raft.d + 34, '#ffd8a8', 17); sfx.wave(); }
+    if (raft.hole === 0) { floatText('卷入回流！', raft.x, raft.d + 34, VERMILION, 17); sfx.wave(); }
     raft.hole += dt; raft.av += (prng() - 0.5) * 16 * dt; shake = Math.max(shake, 0.06);
     if (Math.random() < dt * 22) splash(raft.x + (Math.random() - 0.5) * 30, raft.d + (Math.random() - 0.5) * 30, 2, 'rgba(255,255,255,.9)', 90);
     if (raft.hole > 2.4) { raft.hole = 0.01; raft.vd += 240; hurt({}, 0, 1); }
@@ -771,7 +840,7 @@ function update(dt) {
     const off = Math.abs(raft.x - q.x);
     body.vz += 95; body.vpitch += 3; buzz(18); ripple(raft.x, raft.d + 20, 70, 1.2, 0.55, 16);
     raft.bump = 1; shake = Math.max(shake, 0.16); splash(raft.x + sa * 16, raft.d + ca * 16, 18, 'rgba(255,255,255,.95)', 170, 1.5); sfx.drop();
-    if (off < q.half) { raft.vd += 55; if (off < q.half * 0.6 && playing) { raft.score += 100; floatText('漂亮！+100', raft.x, raft.d + 40, '#d8f3f5', 16); } }
+    if (off < q.half) { raft.vd += 55; if (off < q.half * 0.6 && playing) { raft.score += 100; floatText('漂亮！+100', raft.x, raft.d + 40, TEAL, 16); } }
   }
   // 急流里的驻波：冲过浪尖时颠一下
   if (boost > 0.4 && Math.floor(raft.d / WAVE_GAP) !== Math.floor(d0 / WAVE_GAP)) {
@@ -794,7 +863,7 @@ function update(dt) {
     const s = Math.sign(off);
     raft.x = c2 + s * lim; raft.touch = 0.15;
     if (raft.vx * s > 0) {
-      if (raft.vx * s > 60 && bankSfxCd <= 0) { sfx.bank(); bankSfxCd = 0.4; splash(raft.x + s * RAFT_R, raft.d, 6, '#cdbb8e', 60); squish(-s, 0, 0.3); raft.av -= s * 0.8; }
+      if (raft.vx * s > 60 && bankSfxCd <= 0) { sfx.bank(); bankSfxCd = 0.4; splash(raft.x + s * RAFT_R, raft.d, 6, '#d8c7a0', 60); squish(-s, 0, 0.3); raft.av -= s * 0.8; }
       raft.vx = -raft.vx * 0.25;
     }
     raft.vd -= raft.vd * 1.2 * dt;
@@ -809,7 +878,7 @@ function update(dt) {
     let s = near ? Math.sign(raft.x - near.x) || 1 : -Math.sign(off) || 1;
     if (s * off > lim - 30) s = -s;                    // 那一侧是岸，就往另一侧
     raft.vx += s * 170; raft.vd -= 80; raft.stuck = 0; sfx.bank();
-    floatText('撑开！', raft.x, raft.d + 30, '#d8f3f5', 14);
+    floatText('撑开！', raft.x, raft.d + 30, TEAL, 14);
   }
 
   // 鸭子：靠近就飞走
@@ -828,7 +897,7 @@ function update(dt) {
       const dd = raft.d - r.d;
       if (dd > 60) {
         if (!r.passed) { r.passed = true;
-          if (!r.hit && r.min < r.r + HULL_R + 8 && spd > 110) { raft.score += 50; raft.near++; floatText('好险！+50', raft.x, raft.d + 30, '#d8f3f5', 15); sfx.near(); } }
+          if (!r.hit && r.min < r.r + HULL_R + 8 && spd > 110) { raft.score += 50; raft.near++; floatText('好险！+50', raft.x, raft.d + 30, TEAL, 15); sfx.near(); } }
         continue;
       }
       if (dd < -60) continue;
@@ -858,18 +927,18 @@ function update(dt) {
         }
       } else if (c.dist > min + 24) l.lock = false;
     }
-    // 星星与连击
+    // 莲花与连击
     for (const c of coins) {
       if (c.got || Math.abs(c.d - raft.d) > 60) continue;
       const cdist = Math.hypot(c.x - raft.x, c.d - raft.d);
-      if (cdist < 54 && cdist >= 26) { const k = Math.min(1, 7 * dt); c.x += (raft.x - c.x) * k; c.d += (raft.d - c.d) * k; }      // 靠近时星星会被吸过来
+      if (cdist < 54 && cdist >= 26) { const k = Math.min(1, 7 * dt); c.x += (raft.x - c.x) * k; c.d += (raft.d - c.d) * k; }      // 靠近时莲花会漂过来
       else if (cdist < 26) {
-        c.got = true; hud.fx.push({ kind: 'star', wx: c.x, wd: c.d, t: 0 }); ripple(c.x, c.d, 26, 0.6, 0.5, 6);
+        c.got = true; if (hud.fx.length < 8) hud.fx.push({ kind: 'star', wx: c.x, wd: c.d, t: 0 }); ripple(c.x, c.d, 26, 0.6, 0.5, 6);
         raft.coins++; raft.combo++; raft.bestCombo = Math.max(raft.bestCombo, raft.combo);
         const pts = 100 + 10 * Math.min(raft.combo - 1, 20); raft.score += pts;
-        sfx.coin(raft.combo); splash(c.x, c.d, 6, '#ffe066', 80);
-        floatText('+' + pts, c.x, c.d + 28, '#ffe066', 14);
-        if (raft.combo % 10 === 0) { floatText(`连击 ×${raft.combo}！`, raft.x, raft.d + 58, '#fff3bf', 22); sfx.combo(); }
+        sfx.coin(raft.combo); splash(c.x, c.d, 7, '#f6b9c6', 80);
+        floatText('+' + pts, c.x, c.d + 28, OCHRE, 14);
+        if (raft.combo % 10 === 0) { floatText(`连击 ×${raft.combo}！`, raft.x, raft.d + 58, OCHRE, 22); sfx.combo(); }
       }
     }
     while (nextCoin < coins.length && coins[nextCoin].d < raft.d - 45) { if (!coins[nextCoin].got) raft.combo = 0; nextCoin++; }
@@ -882,9 +951,9 @@ function update(dt) {
     // 救生圈
     for (const g of rings) {
       if (g.got || Math.hypot(g.x - raft.x, g.d - raft.d) > 28) continue;
-      g.got = true; sfx.ring(); splash(g.x, g.d, 10, '#ffc9c9', 90);
-      if (raft.hp < 3) { raft.hp++; hud.gain = { i: raft.hp - 1, t: 0 }; floatText('气囊 +1', g.x, g.d + 16, '#ff8787', 17); }
-      else { raft.score += 300; floatText('+300', g.x, g.d + 16, '#ffe066', 17); }
+      g.got = true; sfx.ring(); splash(g.x, g.d, 10, '#fbe3d6', 90);
+      if (raft.hp < 3) { raft.hp++; hud.gain = { i: raft.hp - 1, t: 0 }; floatText('气囊 +1', g.x, g.d + 16, VERMILION, 17); }
+      else { raft.score += 300; floatText('+300', g.x, g.d + 16, OCHRE, 17); }
     }
     if (state === 'play' && raft.d >= END) win();
   } else if (state === 'dead') {
@@ -905,7 +974,7 @@ function win() {
   const old = result.old = store.get(bestKey(LV), null);
   result.best = { stars: Math.max(result.stars, old ? old.stars : 0), score: Math.max(result.score, old ? old.score || 0 : 0), time: Math.min(result.time, old ? old.time : 1e9) };
   store.set(bestKey(LV), result.best);
-  const COL = ['#ffd23f', '#ff6b6b', '#4dabf7', '#69db7c', '#ffffff', '#ff922b'];
+  const COL = ['#f6c1cd', '#fbe3e8', '#f09bb0', '#ffffff', '#f4d58d', '#f6c1cd'];      // 通关时落下的是花瓣
   for (let i = 0; i < 110; i++) confetti.push({ x: Math.random() * W, y: -20 - Math.random() * 320, vy: 110 + Math.random() * 150,
     vx: (Math.random() - 0.5) * 50, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 12, ph: Math.random() * TAU, c: COL[i % COL.length], s: 5 + Math.random() * 5 });
   setTimeout(showWin, 1100);
@@ -915,26 +984,6 @@ function win() {
 let baseY = 0, camD = 0;
 const Y = d => baseY - (d - camD);
 
-function star(x, y, r, rot = 0) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = rot + i * Math.PI / 5 - Math.PI / 2, rr = i % 2 ? r * 0.45 : r;
-    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-  }
-  ctx.closePath();
-}
-function heart(x, y, s) {
-  ctx.beginPath(); ctx.moveTo(x, y + s * 0.9);
-  ctx.bezierCurveTo(x - s * 1.4, y - s * 0.1, x - s * 0.7, y - s * 1.1, x, y - s * 0.35);
-  ctx.bezierCurveTo(x + s * 0.7, y - s * 1.1, x + s * 1.4, y - s * 0.1, x, y + s * 0.9);
-  ctx.closePath();
-}
-function outlined(text, x, y, size, fill = '#fff', align = 'center') {
-  ctx.font = `700 ${size}px ${FONT}`;
-  ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(3, size * 0.26); ctx.strokeStyle = 'rgba(6,30,40,.85)'; ctx.strokeText(text, x, y);
-  ctx.fillStyle = fill; ctx.fillText(text, x, y);
-}
 const circle = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); };
 const oval = (x, y, rx, ry, rot = 0) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, TAU); };
 // 用平铺贴图填满当前裁剪区；(ox, oy) 为贴图偏移，(sx, sy) 为缩放
@@ -945,46 +994,75 @@ function fillPattern(pat, ox, oy, sx = 1, sy = sx, alpha = 1, op = 'source-over'
   ctx.fillRect(0, 0, (W + 60) / sx + TS * 2, (H + 60) / sy + TS * 2);
   ctx.restore();
 }
-
-function drawBanner(d, label, c1, c2) {
-  const y = Y(d); if (y < -40 || y > H + 40) return;
-  const xl = riverCx(d) - riverW(d) - 8, xr = riverCx(d) + riverW(d) + 8;
-  ctx.strokeStyle = 'rgba(0,25,35,.25)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(xl + SUN[0], y + SUN[1]); ctx.lineTo(xr + SUN[0], y + SUN[1]); ctx.stroke();
-  ctx.strokeStyle = '#e9e4d4'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(xl, y); ctx.lineTo(xr, y); ctx.stroke();
-  const n = 16, cw = (xr - xl) / n;
-  for (let i = 0; i < n; i++) {      // 一串小旗
-    const x = xl + (i + 0.5) * cw, fl = Math.sin(T * 4 + i) * 1.5;
-    ctx.fillStyle = i % 2 ? c1 : c2; ctx.beginPath(); ctx.moveTo(x - cw * 0.36, y); ctx.lineTo(x + cw * 0.36, y); ctx.lineTo(x + fl, y + 11); ctx.closePath(); ctx.fill();
-  }
-  for (const x of [xl, xr]) {
-    ctx.fillStyle = 'rgba(0,25,35,.3)'; oval(x + SUN[0], y + SUN[1], 5, 4); ctx.fill();
-    const g = ctx.createRadialGradient(x - 1.5, y - 1.5, 0.5, x, y, 5); g.addColorStop(0, '#a98458'); g.addColorStop(1, '#4e3520');
-    ctx.fillStyle = g; circle(x, y, 4.5); ctx.fill();
-  }
-  outlined(label, (xl + xr) / 2, y - 16, 17, '#fff');
+// 墨字：深色的字配一圈纸色的晕边，压在任何底色上都读得清
+function inkText(text, x, y, size, color = INK, align = 'center', font = FONT, weight = 600) {
+  ctx.font = `${weight} ${size}px ${font}`; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(3, size * 0.32); ctx.strokeStyle = paperA(0.85); ctx.strokeText(text, x, y);
+  ctx.fillStyle = color; ctx.fillText(text, x, y);
+}
+// 纸签：一小条纸，上面写字
+function paperTag(text, x, y, size) {
+  ctx.font = `600 ${size}px ${KAI}`; const w = ctx.measureText(text).width + size * 1.5, h = size * 1.95;
+  ctx.fillStyle = 'rgba(70,60,40,.16)'; ctx.beginPath(); ctx.roundRect(x - w / 2 + 2, y - h / 2 + 3, w, h, 4); ctx.fill();
+  ctx.fillStyle = paperA(0.92); ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, 4); ctx.fill();
+  ctx.strokeStyle = ink(0.26); ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 1);
+}
+// 一块石头：受光面浅、背光面深，墨线勾边
+function stone(x, y, rx, ry, rot, pal, line = 0.5) {
+  const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.4, 0.5, x, y, Math.max(rx, ry) * 1.1);
+  g.addColorStop(0, col(pal[0])); g.addColorStop(0.55, col(pal[1])); g.addColorStop(1, col(pal[2]));
+  ctx.fillStyle = g; oval(x, y, rx, ry, rot); ctx.fill();
+  ctx.strokeStyle = ink(line); ctx.lineWidth = 0.9; ctx.stroke();
 }
 
+// 起点和终点：两根木桩之间拉一条绳，挂着草木染的小旗
+const DYE = ['#5d7f9c', '#f1e7cf', '#c8705a', '#f1e7cf', '#d6a650', '#f1e7cf'];
+function drawBanner(d, label) {
+  const y = Y(d); if (y < -40 || y > H + 40) return;
+  const xl = riverCx(d) - riverW(d) - 9, xr = riverCx(d) + riverW(d) + 9, n = 14, sag = 5;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = TH.shadow + '.2)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(xl + SUN[0], y + SUN[1]); ctx.quadraticCurveTo((xl + xr) / 2 + SUN[0], y + sag * 2 + SUN[1] + 4, xr + SUN[0], y + SUN[1]); ctx.stroke();
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, x = lerp(xl, xr, t), yy = y + 4 * sag * t * (1 - t), w = (xr - xl) / n * 0.36, fl = Math.sin(T * 3.4 + i * 0.9) * 1.6;
+    ctx.beginPath(); ctx.moveTo(x - w, yy); ctx.lineTo(x + w, yy); ctx.lineTo(x + fl, yy + 12); ctx.closePath();
+    ctx.fillStyle = DYE[i % DYE.length]; ctx.fill(); ctx.strokeStyle = ink(0.32); ctx.lineWidth = 0.7; ctx.stroke();
+  }
+  ctx.strokeStyle = ink(0.7); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(xl, y); ctx.quadraticCurveTo((xl + xr) / 2, y + sag * 2, xr, y); ctx.stroke();
+  for (const x of [xl, xr]) {
+    ctx.fillStyle = TH.shadow + '.28)'; oval(x + SUN[0] * 0.7, y + SUN[1] * 0.7, 5, 4); ctx.fill();
+    stone(x, y, 4.6, 4.6, 0, [[196, 160, 118], [140, 104, 72], [92, 66, 46]], 0.6);
+  }
+  inkText(label, (xl + xr) / 2, y - 17, 17, INK, 'center', KAI);
+}
+
+// 木桥：旧木板，深浅不一
 function drawBridge(d) {
   const y = Y(d); if (y < -70 || y > H + 70) return;
-  const xl = riverCx(d) - riverW(d) - 36, xr = riverCx(d) + riverW(d) + 36, h = 34;
-  ctx.fillStyle = 'rgba(0,22,30,.3)'; ctx.fillRect(xl + SUN[0] * 1.8, y - h / 2 + SUN[1] * 1.8, xr - xl, h);
-  for (let x = xl, i = 0; x < xr; x += 9, i++) {      // 每块木板深浅略有不同
-    const t = hash(i, d | 0), sh = 118 + t * 44 | 0;
-    ctx.fillStyle = `rgb(${sh + 30},${sh - 6},${sh - 52})`; ctx.fillRect(x, y - h / 2, Math.min(8.3, xr - x), h);
+  const xl = riverCx(d) - riverW(d) - 36, xr = riverCx(d) + riverW(d) + 36, h = 32;
+  ctx.fillStyle = TH.shadow + '.26)'; ctx.fillRect(xl + SUN[0] * 1.8, y - h / 2 + SUN[1] * 1.8, xr - xl, h);
+  for (let x = xl, i = 0; x < xr; x += 8.5, i++) {
+    ctx.fillStyle = col(mixc([206, 184, 150], [156, 132, 106], hash(i, d | 0)));
+    ctx.fillRect(x, y - h / 2 + (hash(i, 7) - 0.5) * 2.4, Math.min(8.6, xr - x), h);
   }
   const lg = ctx.createLinearGradient(0, y - h / 2, 0, y + h / 2);
-  lg.addColorStop(0, 'rgba(255,240,200,.16)'); lg.addColorStop(0.5, 'rgba(0,0,0,0)'); lg.addColorStop(1, 'rgba(0,0,0,.2)');
-  ctx.fillStyle = lg; ctx.fillRect(xl, y - h / 2, xr - xl, h);
-  for (const yy of [y - h / 2, y + h / 2]) {          // 栏杆
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(xl, yy, xr - xl, 5);
-    ctx.fillStyle = '#6e4a2a'; ctx.fillRect(xl, yy - 3.5, xr - xl, 5);
-    ctx.fillStyle = '#9a6f44'; ctx.fillRect(xl, yy - 3.5, xr - xl, 1.5);
-    for (const x of [xl, xl + (xr - xl) / 3, xl + (xr - xl) * 2 / 3, xr]) { ctx.fillStyle = '#3f2913'; ctx.fillRect(x - 4, yy - 5.5, 8, 9); ctx.fillStyle = '#7a5532'; ctx.fillRect(x - 4, yy - 5.5, 8, 2.5); }
+  lg.addColorStop(0, 'rgba(255,248,226,.3)'); lg.addColorStop(0.5, 'rgba(255,248,226,0)'); lg.addColorStop(1, TH.shadow + '.2)');
+  ctx.fillStyle = lg; ctx.fillRect(xl, y - h / 2 - 1, xr - xl, h + 2);
+  ctx.strokeStyle = ink(0.26); ctx.lineWidth = 0.8; ctx.beginPath();
+  for (let x = xl + 8.5, i = 0; x < xr; x += 8.5, i++) { ctx.moveTo(x, y - h / 2 + hash(i, 9) * 3); ctx.lineTo(x + (hash(i, 11) - 0.5), y + h / 2 - hash(i, 13) * 3); }
+  ctx.stroke();
+  for (const yy of [y - h / 2, y + h / 2]) {          // 栏杆和立柱
+    ctx.fillStyle = TH.shadow + '.22)'; ctx.fillRect(xl, yy + 1, xr - xl, 4);
+    ctx.fillStyle = '#8f7356'; ctx.fillRect(xl, yy - 3, xr - xl, 4.4); ctx.fillStyle = 'rgba(255,240,210,.35)'; ctx.fillRect(xl, yy - 3, xr - xl, 1.3);
+    ctx.strokeStyle = ink(0.45); ctx.lineWidth = 0.8; ctx.strokeRect(xl, yy - 3, xr - xl, 4.4);
+    for (const x of [xl, xl + (xr - xl) / 3, xl + (xr - xl) * 2 / 3, xr]) { ctx.fillStyle = '#6d543d'; ctx.fillRect(x - 3.6, yy - 5, 7.2, 8.4); ctx.strokeRect(x - 3.6, yy - 5, 7.2, 8.4); }
   }
 }
 
+// 礁石：水彩铺色，墨线勾形，迎水面一道飞白
 function drawRock(r) {
-  const y = Y(r.d), n = r.pts.length;
+  const y = Y(r.d), n = r.pts.length, P = TH.rock;
   const shape = (ox, oy, k) => {
     ctx.beginPath();
     for (let i = 0; i <= n; i++) {
@@ -994,68 +1072,68 @@ function drawRock(r) {
     }
     ctx.closePath();
   };
-  ctx.fillStyle = 'rgba(8,30,38,.3)'; shape(0, 0, 1.38); ctx.fill();                   // 水下部分
-  ctx.fillStyle = 'rgba(0,18,26,.38)'; shape(SUN[0] * 0.8, SUN[1] * 0.8, 1.02); ctx.fill();   // 投影
-  // 迎水面的白浪枕
-  const pul = Math.sin(T * 6 + r.seed) * 1.2;
-  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3.5 + pul * 0.5; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.ellipse(r.x, y + 1, r.r + 2.5, r.r + 3.5 + pul, 0, 0.12 * Math.PI, 0.88 * Math.PI); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 7;
+  ctx.fillStyle = col(TH.deep, 0.2); shape(0, 0, 1.4); ctx.fill();                                // 水下隐约的石根
+  ctx.fillStyle = TH.shadow + '.3)'; shape(SUN[0] * 0.8, SUN[1] * 0.8, 1.02); ctx.fill();        // 影子
+  const pul = Math.sin(T * 5 + r.seed) * 1.1;                                                      // 迎水面的浪
+  ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 7;
   ctx.beginPath(); ctx.ellipse(r.x, y + 2, r.r + 6, r.r + 8 + pul, 0, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
-  ctx.fillStyle = '#23292c'; shape(0, 0.8, 1.06); ctx.fill();                          // 水线处的湿石
+  ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.lineWidth = 3 + pul * 0.4; ctx.setLineDash([9 + r.r * 0.4, 2.5, 5, 2]); ctx.lineDashOffset = r.seed * 7;
+  ctx.beginPath(); ctx.ellipse(r.x, y + 1, r.r + 2.5, r.r + 3.5 + pul, 0, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
   const g = ctx.createRadialGradient(r.x - r.r * 0.4, y - r.r * 0.45, r.r * 0.1, r.x, y, r.r * 1.15);
-  g.addColorStop(0, '#c2c2b6'); g.addColorStop(0.45, '#878a84'); g.addColorStop(1, '#3f4548');
+  g.addColorStop(0, col(P[0])); g.addColorStop(0.5, col(P[1])); g.addColorStop(1, col(P[2]));
   ctx.fillStyle = g; shape(0, 0, 1); ctx.fill();
   ctx.save(); ctx.clip();
-  ctx.strokeStyle = 'rgba(30,34,36,.4)'; ctx.lineWidth = 1;                             // 裂纹
+  ctx.fillStyle = col(P[2], 0.3); oval(r.x + r.r * 0.35, y + r.r * 0.45, r.r * 0.9, r.r * 0.6, 0.5); ctx.fill();      // 背光面再罩一层
+  ctx.strokeStyle = ink(0.3); ctx.lineWidth = 0.9;                                                                       // 几道石纹
   for (let k = 0; k < 3; k++) {
     const a = hash(r.seed, 20 + k) * TAU, l = r.r * (0.5 + hash(r.seed, 30 + k) * 0.5);
     ctx.beginPath(); ctx.moveTo(r.x + Math.cos(a) * r.r * 0.15, y + Math.sin(a) * r.r * 0.15);
-    ctx.lineTo(r.x + Math.cos(a + 0.3) * l * 0.6, y + Math.sin(a + 0.3) * l * 0.6); ctx.lineTo(r.x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke();
+    ctx.quadraticCurveTo(r.x + Math.cos(a + 0.35) * l * 0.6, y + Math.sin(a + 0.35) * l * 0.6, r.x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke();
   }
-  if (hash(r.seed, 77) > 0.45) { ctx.fillStyle = 'rgba(84,120,40,.75)'; oval(r.x + r.r * 0.35, y + r.r * 0.3, r.r * 0.45, r.r * 0.3, 0.4); ctx.fill(); }
-  ctx.fillStyle = 'rgba(255,255,245,.2)'; oval(r.x - r.r * 0.32, y - r.r * 0.36, r.r * 0.34, r.r * 0.2, -0.6); ctx.fill();
+  if (hash(r.seed, 77) > 0.45) washBlob(ctx, r.x + r.r * 0.3, y + r.r * 0.25, r.r * 0.5, [112, 150, 84], 0.6);        // 青苔
+  washBlob(ctx, r.x - r.r * 0.35, y - r.r * 0.4, r.r * 0.45, [255, 252, 240], 0.4);
   ctx.restore();
+  ctx.strokeStyle = ink(0.62); ctx.lineWidth = 1.2; ctx.setLineDash([16 + r.r, 2.5, 8, 2]); ctx.lineDashOffset = r.seed * 5; shape(0, 0, 1); ctx.stroke(); ctx.setLineDash([]);
 }
 
+// 漂木
 function drawLog(l) {
-  ctx.save(); ctx.translate(l.x, Y(l.d)); ctx.rotate(-l.rot);
-  const y = 0, lx = 0, x0 = -l.len - 6, x1 = l.len + 6;
-  ctx.globalAlpha = l.fade;
-  const cr = Math.cos(l.rot), sr = Math.sin(l.rot), ox = (SUN[0] * cr - SUN[1] * sr) * 0.6, oy = (SUN[0] * sr + SUN[1] * cr) * 0.6;      // 影子方向不随木头转
-  ctx.fillStyle = 'rgba(0,18,26,.35)'; ctx.beginPath(); ctx.roundRect(x0 + ox, y - 8 + oy, x1 - x0, 16, 8); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x0 - 2.5, y - 10.5 + Math.sin(T * 3 + l.seed) * 0.6, x1 - x0 + 5, 21, 10); ctx.stroke();     // 随波起伏的水纹
-  const g = ctx.createLinearGradient(0, y - 8, 0, y + 8);
-  g.addColorStop(0, '#5a3d24'); g.addColorStop(0.3, '#9a7148'); g.addColorStop(0.55, '#77532f'); g.addColorStop(1, '#2e1d0f');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x0, y - 8, x1 - x0, 16, 7); ctx.fill();
-  ctx.strokeStyle = 'rgba(38,22,10,.55)'; ctx.lineWidth = 1;                                // 树皮纹
-  for (let k = 0; k < 6; k++) {
-    const yy = y - 5.5 + k * 2.2, a = x0 + 6 + hash(k, l.seed) * 14, b = x1 - 10 - hash(k, 3 + (l.seed)) * 14;
-    ctx.beginPath(); ctx.moveTo(a, yy); ctx.lineTo((a + b) / 2, yy + (hash(k, 9) - 0.5) * 1.5); ctx.lineTo(b, yy); ctx.stroke();
+  ctx.save(); ctx.translate(l.x, Y(l.d)); ctx.rotate(-l.rot); ctx.globalAlpha = l.fade;
+  const x0 = -l.len - 6, x1 = l.len + 6, cr = Math.cos(l.rot), sr = Math.sin(l.rot), ox = (SUN[0] * cr - SUN[1] * sr) * 0.6, oy = (SUN[0] * sr + SUN[1] * cr) * 0.6;
+  ctx.fillStyle = TH.shadow + '.3)'; ctx.beginPath(); ctx.roundRect(x0 + ox, -8 + oy, x1 - x0, 16, 8); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.roundRect(x0 - 3, -11 + Math.sin(T * 3 + l.seed) * 0.6, x1 - x0 + 6, 22, 11); ctx.stroke();
+  const g = ctx.createLinearGradient(0, -8, 0, 8);
+  g.addColorStop(0, '#b8946a'); g.addColorStop(0.35, '#c9a57a'); g.addColorStop(0.7, '#9a7652'); g.addColorStop(1, '#6e5038');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x0, -8, x1 - x0, 16, 7); ctx.fill();
+  ctx.strokeStyle = ink(0.6); ctx.lineWidth = 1.1; ctx.stroke();
+  ctx.strokeStyle = ink(0.3); ctx.lineWidth = 0.8; ctx.lineCap = 'round';                        // 木纹
+  for (let k = 0; k < 5; k++) {
+    const yy = -5 + k * 2.5, a = x0 + 6 + hash(k, l.seed) * 14, b = x1 - 10 - hash(k, 3 + l.seed) * 14;
+    ctx.beginPath(); ctx.moveTo(a, yy); ctx.quadraticCurveTo((a + b) / 2, yy + (hash(k, 9) - 0.5) * 2.4, b, yy); ctx.stroke();
   }
-  ctx.fillStyle = '#4a321c'; ctx.beginPath(); ctx.roundRect(lx - 9, y - 12.5, 5, 6, 2); ctx.fill();   // 断枝
-  ctx.fillStyle = '#c9a877'; oval(x1 - 1.5, y, 3, 6.8); ctx.fill();                          // 截面年轮
-  ctx.strokeStyle = '#8a6540'; ctx.lineWidth = 0.9; oval(x1 - 1.5, y, 1.7, 4.2); ctx.stroke(); oval(x1 - 1.5, y, 0.6, 1.8); ctx.stroke();
+  ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.roundRect(-9, -12.5, 5, 6, 2); ctx.fill(); ctx.strokeStyle = ink(0.5); ctx.stroke();      // 断枝
+  ctx.fillStyle = '#e6cfa4'; oval(x1 - 1.5, 0, 3, 6.8); ctx.fill(); ctx.strokeStyle = ink(0.5); ctx.lineWidth = 0.9; ctx.stroke();           // 截面年轮
+  ctx.strokeStyle = 'rgba(140,100,64,.7)'; oval(x1 - 1.5, 0, 1.6, 4); ctx.stroke();
   ctx.globalAlpha = 1; ctx.restore();
 }
 
-const VEST = ['#e03131', '#f08c00', '#e03131', '#f08c00'], HELM = ['#f1f3f5', '#ffd43b', '#4dabf7', '#f1f3f5'];
+const VEST = ['#46708e', '#d9a441', '#46708e', '#d9a441'], HELM = ['#f6f0e0', '#ecc96e', '#9cc0d2', '#f6f0e0'];
 function drawRaft() {
   const x = raft.x, y = Y(raft.d), b = body;
   const ghost = raft.inv > 0 && state === 'play' ? 0.72 + 0.28 * Math.cos(raft.inv * 30) : 1;      // 无敌时间内半透明地闪，而不是整个消失
   const z = Math.max(-2, b.z);
   ctx.save(); ctx.translate(x, y);
-  // 水下的影子：艇被浪抛起时，影子会离开艇身
+  // 水面上的影子：艇被浪抛起时，影子会离开艇身
   ctx.save(); ctx.translate(SUN[0] * (0.7 + z * 0.13), SUN[1] * (0.7 + z * 0.13)); ctx.rotate(raft.a);
   ctx.globalAlpha = clamp(1 - z * 0.03, 0.5, 1) * (1 - raft.sink * 0.7) * ghost;
-  ctx.fillStyle = 'rgba(0,18,26,.38)'; ctx.beginPath(); ctx.roundRect(-14, -24, 28, 48, [13, 13, 10, 10]); ctx.fill(); ctx.restore();
+  ctx.fillStyle = TH.shadow + '.34)'; ctx.beginPath(); ctx.roundRect(-14, -24, 28, 48, [13, 13, 10, 10]); ctx.fill(); ctx.restore();
   ctx.rotate(raft.a);
-  // 艇首浪花
+  // 艇首推开的水
   const bow = clamp(raft.rel / 150, 0, 1) * (z < 5 ? 1 : 0);
   if (bow > 0.08 && !raft.sink) {
-    ctx.strokeStyle = `rgba(255,255,255,${0.75 * bow})`; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(255,255,255,${0.85 * bow})`; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * 3, -26); ctx.quadraticCurveTo(s * 15, -23, s * (18 + bow * 8), -8 + bow * 10); ctx.stroke(); }
-    ctx.fillStyle = `rgba(255,255,255,${0.5 * bow})`; oval(0, -25.5, 9, 3); ctx.fill();
+    ctx.fillStyle = `rgba(255,255,255,${0.55 * bow})`; oval(0, -25.5, 9, 3); ctx.fill();
   }
   // 浮沉（整体放大）→ 弹性形变（沿撞击方向压扁再回弹）→ 俯仰（纵向缩短）
   const sc = (1 - raft.sink * 0.5) * (1 + z * 0.007), jel = clamp(b.jel, -0.6, 1);
@@ -1064,52 +1142,51 @@ function drawRaft() {
   const tilt = b.roll * 5, dip = b.pitch * 4;                // 侧倾和俯仰时，艇内的东西相对气囊偏移
   const cx = tilt + b.lx, cy = dip + b.ly;                    // 队员还带着自己的惯性
 
-  // 桨（在队员之下）
+  // 桨（在队员之下）：木柄，浅色桨叶
   const seats = [[-1, -9, raft.phL, raft.dirL], [-1, 5, raft.phL, raft.dirL], [1, -9, raft.phR, raft.dirR], [1, 5, raft.phR, raft.dirR]];
   const blade = (ph, dir) => ph <= 0 ? [-1, false] : ph < POWER ? [lerp(-8, 8, ph / POWER) * dir, true] : [lerp(8, -8, (ph - POWER) / (1 - POWER)) * dir, false];
   for (const [s, sy, ph, dir] of seats) {
     const [by, wet] = blade(ph, dir), bx = s * (wet ? 24 : 22), yy = sy + by;
-    ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.strokeStyle = '#7d5c3c'; ctx.lineWidth = 1.7; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(s * 6 + cx, sy + by * 0.25 - 1 + cy); ctx.lineTo(bx, yy); ctx.stroke();
-    if (wet) { ctx.fillStyle = 'rgba(255,255,255,.6)'; oval(bx + s * 2, yy + 1, 5.5, 3.5); ctx.fill(); }
-    ctx.fillStyle = wet ? '#c9a227' : '#ffd43b';
-    ctx.save(); ctx.translate(bx + s * 3, yy); ctx.rotate(s * by * 0.03); ctx.beginPath(); ctx.roundRect(-4.5, wet ? -1.6 : -2.6, 9, wet ? 3.2 : 5.2, 1.5); ctx.fill(); ctx.restore();
+    if (wet) { ctx.fillStyle = 'rgba(255,255,255,.7)'; oval(bx + s * 2, yy + 1, 5.5, 3.5); ctx.fill(); }
+    ctx.fillStyle = wet ? '#c9b488' : '#efe0b8';
+    ctx.save(); ctx.translate(bx + s * 3, yy); ctx.rotate(s * by * 0.03); ctx.beginPath(); ctx.roundRect(-4.5, wet ? -1.6 : -2.6, 9, wet ? 3.2 : 5.2, 1.5); ctx.fill();
+    ctx.strokeStyle = ink(0.45); ctx.lineWidth = 0.6; ctx.stroke(); ctx.restore();
   }
-  // 气囊：横向渐变做出圆筒的体积感；侧倾时高光跟着移动
+  // 气囊：珊瑚红，横向的明暗做出圆筒的体积；侧倾时高光跟着移动
   const hull = k => { ctx.beginPath(); ctx.roundRect(-14 + k, -24 + k, 28 - 2 * k, 48 - 2 * k, [13 - k * 0.8, 13 - k * 0.8, Math.max(2, 10 - k), Math.max(2, 10 - k)]); };
   const tg = ctx.createLinearGradient(-14 - tilt * 0.9, 0, 14 - tilt * 0.9, 0);
-  tg.addColorStop(0, '#8c2f0b'); tg.addColorStop(0.12, '#e8590c'); tg.addColorStop(0.2, '#ffb066'); tg.addColorStop(0.3, '#f76707');
-  tg.addColorStop(0.7, '#f76707'); tg.addColorStop(0.78, '#ff9f4d'); tg.addColorStop(0.9, '#d9480f'); tg.addColorStop(1, '#7a2808');
+  tg.addColorStop(0, '#a8442f'); tg.addColorStop(0.12, '#dc6548'); tg.addColorStop(0.2, '#f6a585'); tg.addColorStop(0.3, '#e46f51');
+  tg.addColorStop(0.7, '#e46f51'); tg.addColorStop(0.78, '#f09474'); tg.addColorStop(0.9, '#cf583d'); tg.addColorStop(1, '#93382a');
   ctx.fillStyle = tg; hull(0); ctx.fill();
-  if (raft.hp < 3) { ctx.fillStyle = `rgba(50,24,10,${0.13 * (3 - raft.hp)})`; hull(0); ctx.fill(); }      // 漏气后气囊发瘪发暗
+  if (raft.hp < 3) { ctx.fillStyle = `rgba(70,50,60,${0.13 * (3 - raft.hp)})`; hull(0); ctx.fill(); }      // 漏气后气囊发瘪发暗
   const eg = ctx.createLinearGradient(0, -24 - dip * 1.5, 0, 24 - dip * 1.5);          // 首尾两端的明暗，俯仰时前后移动
-  eg.addColorStop(0, 'rgba(255,225,170,.4)'); eg.addColorStop(0.14, 'rgba(255,225,170,0)'); eg.addColorStop(0.86, 'rgba(0,0,0,0)'); eg.addColorStop(1, 'rgba(60,15,0,.45)');
+  eg.addColorStop(0, 'rgba(255,236,206,.45)'); eg.addColorStop(0.14, 'rgba(255,236,206,0)'); eg.addColorStop(0.86, 'rgba(70,40,70,0)'); eg.addColorStop(1, 'rgba(70,40,70,.38)');
   ctx.fillStyle = eg; hull(0); ctx.fill();
-  ctx.strokeStyle = 'rgba(70,20,0,.5)'; ctx.lineWidth = 0.8; hull(0.4); ctx.stroke();
   ctx.save(); hull(5.6); ctx.clip(); ctx.translate(tilt * 0.5, dip * 0.5);              // 艇底：被气囊内缘裁切
-  ctx.fillStyle = '#2f3b42'; ctx.fillRect(-12, -22, 24, 44);
-  ctx.strokeStyle = 'rgba(255,255,255,.1)'; ctx.lineWidth = 0.7; ctx.beginPath();
+  ctx.fillStyle = '#5f6f76'; ctx.fillRect(-12, -22, 24, 44);
+  ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 0.7; ctx.beginPath();
   for (let i = -17.5; i <= 17.5; i += 3.5) { ctx.moveTo(-9, i); ctx.lineTo(9, i); } ctx.stroke();
   for (const ty of [-2, 11]) {                                                           // 横隔气囊
     const cg = ctx.createLinearGradient(0, ty - 2.6, 0, ty + 2.6);
-    cg.addColorStop(0, '#ffa94d'); cg.addColorStop(0.5, '#f76707'); cg.addColorStop(1, '#8c2f0b');
+    cg.addColorStop(0, '#f6a585'); cg.addColorStop(0.5, '#e46f51'); cg.addColorStop(1, '#a8442f');
     ctx.fillStyle = cg; ctx.fillRect(-10, ty - 2.6, 20, 5.2);
   }
   ctx.restore();
-  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.6; hull(6.5); ctx.stroke();
-  ctx.setLineDash([3, 2.2]); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 0.8; hull(-0.6); ctx.stroke(); ctx.setLineDash([]);   // 安全绳
+  ctx.strokeStyle = ink(0.5); ctx.lineWidth = 1; hull(6.2); ctx.stroke();
+  ctx.setLineDash([3, 2.2]); ctx.strokeStyle = 'rgba(255,250,236,.85)'; ctx.lineWidth = 0.8; hull(1.6); ctx.stroke(); ctx.setLineDash([]);   // 安全绳
+  ctx.strokeStyle = ink(0.68); ctx.lineWidth = 1.1; hull(0); ctx.stroke();               // 墨线勾出艇形
   // 四名队员：救生衣 + 头盔，随划桨前后俯仰，加减速和转弯时身体会晃
   seats.forEach(([s, sy, ph, dir], i) => {
     const [by] = blade(ph, dir), lean = by * 0.14, px = s * 9 + cx, py = sy + cy;
-    ctx.strokeStyle = '#3b5b7a'; ctx.lineWidth = 2; ctx.lineCap = 'round';               // 手臂
+    ctx.strokeStyle = '#56646e'; ctx.lineWidth = 2; ctx.lineCap = 'round';               // 手臂
     ctx.beginPath(); ctx.moveTo(px - s * 0.5, py - 1.5); ctx.lineTo(s * 12.5 + cx * 0.5, sy + by * 0.5); ctx.moveTo(px - s * 1.5, py + 1.5); ctx.lineTo(s * 8 + cx, sy + by * 0.3 + cy); ctx.stroke();
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; oval(px + 1, py + 1.6, 4.6, 3.8); ctx.fill();
-    ctx.fillStyle = VEST[i]; oval(px, py + lean * 0.4, 4.4, 3.6); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.2)'; oval(px - 1, py - 1 + lean * 0.4, 2.4, 1.6); ctx.fill();
+    ctx.fillStyle = TH.shadow + '.3)'; oval(px + 1, py + 1.6, 4.6, 3.8); ctx.fill();
+    ctx.fillStyle = VEST[i]; oval(px, py + lean * 0.4, 4.4, 3.6); ctx.fill(); ctx.strokeStyle = ink(0.45); ctx.lineWidth = 0.6; ctx.stroke();
     const hx = px + b.lx * 0.6, hy = py - 0.6 + lean + b.ly * 0.6;                        // 头比身体晃得更厉害
-    ctx.fillStyle = HELM[i]; circle(hx, hy, 2.9); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.6; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.7)'; circle(hx - 0.9, hy - 0.9, 0.9); ctx.fill();
+    ctx.fillStyle = HELM[i]; circle(hx, hy, 2.9); ctx.fill(); ctx.strokeStyle = ink(0.55); ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; circle(hx - 0.9, hy - 0.9, 0.9); ctx.fill();
   });
   ctx.restore();
 }
@@ -1121,19 +1198,20 @@ function drawDuck(k) {
   ctx.globalAlpha = clamp(1.2 - fl, 0, 1);
   const sc = 1 + fl * 0.5; ctx.scale(sc * (k.s < 0 && fl ? -1 : 1), sc);
   if (!fl) {
-    ctx.fillStyle = 'rgba(0,18,26,.3)'; oval(3, 4, 7, 5); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.2; oval(0, 1, 10 + Math.sin(T * 3 + k.ph), 7.5); ctx.stroke();
+    ctx.fillStyle = TH.shadow + '.26)'; oval(3, 4, 7, 5); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.lineCap = 'round';      // 身后的两道水痕
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-6, s * 3); ctx.quadraticCurveTo(-12, s * 6, -17 - Math.sin(T * 3 + k.ph) * 2, s * 9); ctx.stroke(); }
   } else {
     const wg = Math.sin(T * 30) * 5;
-    ctx.fillStyle = k.brown ? '#a47148' : '#f1f3f5';
-    oval(0, -5 - wg * 0.4, 4, 7, 0.3); ctx.fill(); oval(0, 5 + wg * 0.4, 4, 7, -0.3); ctx.fill();
+    ctx.fillStyle = k.brown ? '#b08a64' : '#fbf8f0'; ctx.strokeStyle = ink(0.4); ctx.lineWidth = 0.7;
+    oval(0, -5 - wg * 0.4, 4, 7, 0.3); ctx.fill(); ctx.stroke(); oval(0, 5 + wg * 0.4, 4, 7, -0.3); ctx.fill(); ctx.stroke();
   }
   const g = ctx.createRadialGradient(-2, -2, 1, 0, 0, 8);
-  if (k.brown) { g.addColorStop(0, '#a98058'); g.addColorStop(1, '#5a3d24'); } else { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#b9c0c6'); }
-  ctx.fillStyle = g; oval(0, 0, 7, 4.8); ctx.fill();
-  ctx.fillStyle = k.brown ? '#1f6b34' : '#f4f4f4'; circle(6, -1.8, 3.1); ctx.fill();
-  ctx.fillStyle = '#e8890c'; ctx.beginPath(); ctx.moveTo(8.3, -3.2); ctx.lineTo(12.5, -1.8); ctx.lineTo(8.3, -0.4); ctx.fill();
-  ctx.fillStyle = '#16191b'; circle(6.8, -2.6, 0.7); ctx.fill();
+  if (k.brown) { g.addColorStop(0, '#c2a07a'); g.addColorStop(1, '#7c5c40'); } else { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#d8d6cc'); }
+  ctx.fillStyle = g; oval(0, 0, 7, 4.8); ctx.fill(); ctx.strokeStyle = ink(0.5); ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.fillStyle = k.brown ? '#3f7a52' : '#fbf8f0'; circle(6, -1.8, 3.1); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#e09a3c'; ctx.beginPath(); ctx.moveTo(8.3, -3.2); ctx.lineTo(12.5, -1.8); ctx.lineTo(8.3, -0.4); ctx.fill();
+  ctx.fillStyle = INK; circle(6.8, -2.6, 0.7); ctx.fill();
   ctx.restore();
 }
 
@@ -1148,77 +1226,110 @@ function eachTree(d0, d1, fn) {
     fn(x, d, k, TH.kinds[hash(i, 90 + s) * TH.kinds.length | 0], hash(i, 95 + s) * TAU, i);
   }
 }
+const drawTree = (v) => ctx.drawImage(TREES[v], -TREE / 2, -TREE / 2, TREE, TREE);
 
-// 静态地形按 512 像素一段预渲染并缓存：下层（草地、河床、水色、树影）和上层（树冠）
+// 静态的风景按 512 一段预先画好并缓存：下层（纸、草地、沙岸、水色、树影）和上层（树冠）
 const CH = 512;
 function drawTerrain(d0, d1) {
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, CH + 2); ctx.clip();
-  fillPattern(PAT[TH.ground], 0, camD);
-  for (let i = Math.floor(d0 / 110) - 1; i <= d1 / 110 + 1; i++) {
-    ctx.fillStyle = hash(i, 1) > 0.5 ? 'rgba(24,52,22,.1)' : 'rgba(190,200,110,.07)';
-    oval(hash(i, 2) * W, Y(i * 110 + hash(i, 3) * 110), 60 + hash(i, 4) * 70, 34 + hash(i, 5) * 30, hash(i, 6) * 3); ctx.fill();
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, CH + 2);
+  ctx.fillStyle = col(TH.ground, 0.86); ctx.fillRect(0, 0, W, CH + 2);
+  // 大片的晕染：深一点的、暖一点的、留白的，互相渗在一起
+  for (let i = Math.floor(d0 / 70) - 2; i <= d1 / 70 + 2; i++) for (let k = 0; k < 2; k++) {
+    const h = hash(i, 1 + k), x = hash(i, 3 + k) * W, y = Y(i * 70 + hash(i, 5 + k) * 70), r = 46 + hash(i, 7 + k) * 70;
+    washBlob(ctx, x, y, r, h < 0.42 ? TH.groundB : h < 0.72 ? TH.groundC : [250, 246, 232], h < 0.72 ? 0.28 + hash(i, 9 + k) * 0.2 : 0.3);
+  }
+  fillPattern(PAT.bloom, 0, camD, 1.7, 1.7, 0.4); fillPattern(PAT.shade, 70, camD, 2.1, 2.1, 0.5);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (TH.cliff) {               // 岩层：顺着峡谷走向的断续墨线
+    for (let i = Math.floor(d0 / 60) - 3; i <= d1 / 60 + 1; i++) for (const s of [-1, 1]) for (let k = 0; k < 3; k++) {
+      const dd = i * 60 + hash(i, 400 + k) * 60, off = riverW(dd) + 34 + hash(i, 410 + k + s) * 150, len = 40 + hash(i, 420 + k) * 90;
+      ctx.strokeStyle = col([70, 74, 96], 0.1 + hash(i, 430 + k) * 0.2); ctx.lineWidth = 0.8 + hash(i, 440 + k) * 1.6; ctx.beginPath();
+      for (let t = 0; t <= len; t += 10) ctx.lineTo(riverCx(dd + t) + s * (off + Math.sin(t * 0.07 + i) * 4), Y(dd + t));
+      ctx.stroke();
+    }
   }
   const river = riverPath(d0, d1), mid = new Path2D();
   for (let d = d0; d <= d1; d += 12) mid.lineTo(riverCx(d) + thal(d) * riverW(d) * 0.55, Y(d));
-  ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
-  if (TH.cliff) { ctx.strokeStyle = 'rgba(24,16,10,.22)'; ctx.lineWidth = 120; ctx.stroke(river); ctx.strokeStyle = 'rgba(24,16,10,.3)'; ctx.lineWidth = 72; ctx.stroke(river); }   // 峡壁投下的暗影
-  ctx.strokeStyle = 'rgba(20,40,16,.3)'; ctx.lineWidth = 38; ctx.stroke(river);       // 砾石滩
-  ctx.strokeStyle = PAT.gravel; ctx.lineWidth = 30; ctx.stroke(river);
-  ctx.strokeStyle = 'rgba(70,58,40,.45)'; ctx.lineWidth = 9; ctx.stroke(river);       // 被水浸湿的深色砂石
-  // 水体：河床卵石 → 随深度加深的水色
+  // 沙岸：由外向里一层层罩上去，边缘是晕开的
+  if (TH.cliff) { ctx.strokeStyle = TH.shadow + '.14)'; ctx.lineWidth = 130; ctx.stroke(river); ctx.strokeStyle = TH.shadow + '.16)'; ctx.lineWidth = 78; ctx.stroke(river); }
+  ctx.strokeStyle = col(TH.sand, 0.32); ctx.lineWidth = 48; ctx.stroke(river);
+  ctx.strokeStyle = col(TH.sand, 0.6); ctx.lineWidth = 36; ctx.stroke(river);
+  ctx.strokeStyle = col(TH.sand, 0.96); ctx.lineWidth = 25; ctx.stroke(river);
+  ctx.strokeStyle = col(TH.wet, 0.5); ctx.lineWidth = 9; ctx.stroke(river);
+  // 水：浅水透着纸色和沙色，往河心一层层加深
   ctx.save(); ctx.clip(river);
-  fillPattern(PAT.bed, 0, camD);
-  ctx.fillStyle = TH.tint; ctx.fillRect(0, 0, W, CH + 2);
-  for (const [k, lw] of [212, 176, 138, 100, 62, 30].entries()) { const col = TH.depth[k];
-    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(mid);
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, CH + 2);
+  ctx.fillStyle = col(TH.water, 0.84); ctx.fillRect(0, 0, W, CH + 2);
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = col(TH.channel, 0.085);                                           // 往河心一遍遍薄薄地罩色，过渡是连续的
+  for (let lw = 232; lw >= 12; lw -= 10) { ctx.lineWidth = lw; ctx.stroke(mid); }
+  if (TH.glaze) for (let i = Math.floor(d0 / 90) - 2; i <= d1 / 90 + 2; i++) {          // 晚霞映在水里：一道道顺流拉长的暖色
+    const d = i * 90 + hash(i, 500) * 90, x = riverCx(d) + (hash(i, 501) * 1.5 - 0.75) * riverW(d), y = Y(d), r = 16 + hash(i, 502) * 20;
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, 3.4); washBlob(ctx, 0, 0, r, TH.glaze, 0.2 + hash(i, 503) * 0.16); ctx.restore();
   }
-  for (let i = Math.floor(d0 / 70) - 1; i <= d1 / 70 + 1; i++) for (let k = 0; k < 2; k++) {      // 水下隐约可见的大石
+  fillPattern(PAT.bloom, 30, camD, 2.2, 3.6, 0.36); fillPattern(PAT.shade, 90, camD, 2, 3.8, 0.5);
+  for (let i = Math.floor(d0 / 70) - 1; i <= d1 / 70 + 1; i++) for (let k = 0; k < 2; k++) {      // 水下隐约的大石
     if (hash(i, 200 + k) < 0.42) continue;
-    const d = i * 70 + hash(i, 210 + k) * 70, x = riverCx(d) + (hash(i, 220 + k) * 1.7 - 0.85) * riverW(d), y = Y(d), r = 8 + hash(i, 230 + k) * 17, rot = hash(i, 240 + k) * 3;
-    ctx.fillStyle = 'rgba(4,22,28,.2)'; oval(x + 3, y + 4, r * 1.15, r * 0.85, rot); ctx.fill();
-    ctx.fillStyle = 'rgba(128,156,136,.13)'; oval(x, y, r, r * 0.72, rot); ctx.fill();
-    ctx.fillStyle = 'rgba(200,216,196,.09)'; oval(x - r * 0.25, y - r * 0.2, r * 0.5, r * 0.3, rot); ctx.fill();
+    const d = i * 70 + hash(i, 210 + k) * 70, x = riverCx(d) + (hash(i, 220 + k) * 1.7 - 0.85) * riverW(d), r = 9 + hash(i, 230 + k) * 16;
+    washBlob(ctx, x, Y(d), r, TH.deep, 0.16);
   }
-  ctx.strokeStyle = 'rgba(170,220,190,.16)'; ctx.lineWidth = 34; ctx.stroke(river);   // 浅水的亮边
-  ctx.strokeStyle = 'rgba(214,236,214,.2)'; ctx.lineWidth = 14; ctx.stroke(river);
+  ctx.strokeStyle = col(TH.sand, 0.2); ctx.lineWidth = 54; ctx.stroke(river);         // 浅滩透出的沙色
+  ctx.strokeStyle = col(TH.sand, 0.26); ctx.lineWidth = 28; ctx.stroke(river);
+  for (let i = Math.floor(d0 / 22) - 1; i <= d1 / 22 + 1; i++) for (const s of [-1, 1]) for (let k = 0; k < 2; k++) {     // 浅水里的卵石
+    const d = i * 22 + hash(i, 250 + k + s) * 22, x = edgeX(d, s) - s * (5 + hash(i, 260 + k + s) * 24), r = 1.6 + hash(i, 270 + k + s) * 3.2;
+    ctx.fillStyle = col(TH.rock[1 + (k & 1)], 0.26); oval(x, Y(d), r, r * 0.72, hash(i, 280 + k) * 3); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 11; ctx.stroke(river);    // 贴岸一圈留白
+  ctx.strokeStyle = col(TH.deep, 0.42); ctx.lineWidth = 2.6; ctx.stroke(river);       // 水线：颜料在边缘沉积
   ctx.restore();
-  // 岸线细节：滩上的石块、漂流木，以及草地边缘的草丛
+  ctx.lineCap = 'round';
+  // 岸线细节：石块、漂流木、灌木
   for (let i = Math.floor(d0 / 36) - 1; i <= d1 / 36 + 1; i++) for (const s of [-1, 1]) {
     const d = i * 36 + hash(i, 300 + s) * 36, h = hash(i, 310 + s), ex = edgeX(d, s), y = Y(d);
-    if (h < 0.36) {
-      const x = ex + s * (4 + hash(i, 320 + s) * 9), r = 3.5 + hash(i, 330 + s) * 5.5;
-      ctx.fillStyle = 'rgba(20,16,10,.4)'; oval(x + 2.5, y + 3.5, r, r * 0.75); ctx.fill();
-      const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, 0.5, x, y, r); g.addColorStop(0, '#cfcabb'); g.addColorStop(1, '#565a58');
-      ctx.fillStyle = g; oval(x, y, r, r * 0.76, hash(i, 335 + s) * 3); ctx.fill();
-    } else if (h < 0.43) {
+    if (h < (TH.cliff ? 0.6 : 0.36)) {
+      const x = ex + s * (4 + hash(i, 320 + s) * 10), r = (3.5 + hash(i, 330 + s) * 5.5) * (TH.cliff ? 1.4 : 1);
+      ctx.fillStyle = TH.shadow + '.26)'; oval(x + 2.5, y + 3.5, r, r * 0.75); ctx.fill();
+      stone(x, y, r, r * 0.76, hash(i, 335 + s) * 3, TH.rock);
+    } else if (h < 0.66 && h > 0.6) {
       ctx.save(); ctx.translate(ex + s * 9, y); ctx.rotate(hash(i, 336 + s) * 3);
-      ctx.fillStyle = 'rgba(20,16,10,.35)'; ctx.beginPath(); ctx.roundRect(-11, 0, 24, 3.6, 1.8); ctx.fill();
-      ctx.fillStyle = '#b9a98f'; ctx.beginPath(); ctx.roundRect(-12, -1.8, 24, 3.6, 1.8); ctx.fill();
-      ctx.fillStyle = '#8f7f66'; ctx.fillRect(-9, 0.3, 18, 0.8); ctx.fillRect(3, -4.5, 1.6, 4); ctx.restore();
+      ctx.fillStyle = TH.shadow + '.24)'; ctx.beginPath(); ctx.roundRect(-11, 0.5, 24, 3.6, 1.8); ctx.fill();
+      ctx.fillStyle = '#cdbb9c'; ctx.beginPath(); ctx.roundRect(-12, -1.8, 24, 3.6, 1.8); ctx.fill(); ctx.strokeStyle = ink(0.45); ctx.lineWidth = 0.7; ctx.stroke();
+      ctx.restore();
     }
-    if (TH.shrub && hash(i, 340 + s) < 0.78) for (let k = 0; k < 3; k++) {
-      const x = ex + s * (16 + hash(i, 350 + k) * 7), yy = y + (k - 1) * 9, r = 3.5 + hash(i, 360 + k) * 4;
-      ctx.fillStyle = 'rgba(14,34,14,.3)'; circle(x + 2, yy + 3, r); ctx.fill();
-      ctx.fillStyle = TH.shrub[0]; circle(x, yy, r); ctx.fill(); ctx.fillStyle = TH.shrub[1]; circle(x - r * 0.25, yy - r * 0.3, r * 0.55); ctx.fill();
-    }
-  }
-  // 树影（落在岸上和水面上）
-  ctx.fillStyle = 'rgba(4,22,14,.3)';
-  eachTree(d0, d1, (x, d, k) => { circle(x + SUN[0] * 1.6 * k + 3, Y(d) + SUN[1] * 1.6 * k + 4, 30 * k); ctx.fill(); });
-  // 岸石与野花
-  for (let i = Math.floor(d0 / 44) - 1; i <= d1 / 44 + 1; i++) {
-    const d = i * 44 + hash(i, 91) * 44, x = hash(i, 92) * W, y = Y(d);
-    if (Math.abs(x - riverCx(d)) < riverW(d) + 24) continue;
-    if (hash(i, 93) < (TH.flowers ? 0.3 : 0.8)) {
-      const r = (5 + hash(i, 94) * 8) * (TH.flowers ? 1 : 1.5);
-      ctx.fillStyle = 'rgba(8,26,10,.35)'; oval(x + 4, y + 5, r, r * 0.7); ctx.fill();
-      const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 1, x, y, r); g.addColorStop(0, '#c4c4b8'); g.addColorStop(1, '#5c6264');
-      ctx.fillStyle = g; oval(x, y, r, r * 0.72, hash(i, 96)); ctx.fill();
-    } else if (TH.flowers) {
-      ctx.fillStyle = ['#ffffff', '#ffd6e7', '#fff3bf'][((i % 3) + 3) % 3];
-      circle(x, y, 1.6); ctx.fill(); circle(x + 5, y + 3, 1.3); ctx.fill(); circle(x - 3, y + 5, 1.3); ctx.fill(); circle(x + 2, y - 4, 1.1); ctx.fill();
+    if (TH.shrub && hash(i, 340 + s) < 0.6) for (let k = 0, n = 1 + (hash(i, 345 + s) * 3 | 0); k < n; k++) {
+      const x = ex + s * (15 + hash(i, 350 + k + s) * 16), yy = y + (hash(i, 355 + k + s) - 0.5) * 30, r = 4 + hash(i, 360 + k + s) * 8;
+      washBlob(ctx, x + 2, yy + 3, r, [70, 80, 110], 0.22); washBlob(ctx, x, yy, r, TH.shrub[0], 0.7); washBlob(ctx, x - r * 0.25, yy - r * 0.3, r * 0.6, TH.shrub[1], 0.6);
     }
   }
+  // 树影：一团团冷色的淡影
+  eachTree(d0, d1, (x, d, k) => {
+    const sx = x + SUN[0] * 1.6 * k + 3, sy = Y(d) + SUN[1] * 1.6 * k + 4, g = ctx.createRadialGradient(sx, sy, 6 * k, sx, sy, 34 * k);
+    g.addColorStop(0, TH.shadow + '.3)'); g.addColorStop(0.7, TH.shadow + '.22)'); g.addColorStop(1, TH.shadow + '0)');
+    ctx.fillStyle = g; circle(sx, sy, 34 * k); ctx.fill();
+  });
+  // 地上的小东西：草丛、野花、石头、落叶
+  for (let i = Math.floor(d0 / 30) - 1; i <= d1 / 30 + 1; i++) for (let k = 0; k < 2; k++) {
+    const d = i * 30 + hash(i, 91 + k) * 30, x = hash(i, 92 + k) * W, y = Y(d), h = hash(i, 93 + k);
+    if (Math.abs(x - riverCx(d)) < riverW(d) + 26) continue;
+    if (h < (TH.cliff ? 0.5 : 0.14)) {
+      const r = (4 + hash(i, 94 + k) * 7) * (TH.cliff ? 1.5 : 1);
+      ctx.fillStyle = TH.shadow + '.26)'; oval(x + 3, y + 4, r, r * 0.7); ctx.fill();
+      stone(x, y, r, r * 0.72, hash(i, 96 + k) * 3, TH.rock);
+    } else if (h < 0.62 && !TH.cliff) {                    // 草丛：几笔向上散开的短线
+      ctx.strokeStyle = col(TH.tuft, 0.42 + hash(i, 97 + k) * 0.25); ctx.lineWidth = 1.1;
+      for (let j = -2; j <= 2; j++) { ctx.beginPath(); ctx.moveTo(x + j * 1.4, y + 3); ctx.quadraticCurveTo(x + j * 2.2, y - 2, x + j * 3.6 + hash(i, 98 + j) * 2, y - 5 - (2 - Math.abs(j)) * 2); ctx.stroke(); }
+    } else if (TH.flowers && h < 0.9) {                    // 野花或落叶
+      for (let j = 0; j < 4; j++) {
+        ctx.fillStyle = TH.flowers[(i + j + k) % TH.flowers.length]; ctx.globalAlpha = 0.9;
+        oval(x + (hash(i, 99 + j) - 0.5) * 14, y + (hash(i, 103 + j) - 0.5) * 12, 1.7, TH.fall === 'leaf' ? 1 : 1.7, hash(i, 107 + j) * 3); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+  // 纸纹罩在最上面，颜料的颗粒沉在纸的凹处
+  fillPattern(PAT.grain, 0, camD, 1, 1, 0.5);
+  fillPattern(PAT.paper, 0, camD, 1, 1, 1, 'multiply');
   ctx.restore();
 }
 function riverPath(d0, d1) {
@@ -1233,11 +1344,11 @@ function getChunk(ci) {
   const pr = canvas.width / W, main = ctx, sb = baseY, sc = camD, layers = [];
   baseY = 0; camD = (ci + 1) * CH;
   for (let k = 0; k < 2; k++) {
+    if (k === 1 && cfg.quality) { layers.push(null); break; }       // 精细画质下树冠逐棵绘制（会随风摆动），不需要缓存层
     const cv = document.createElement('canvas'); cv.width = Math.round(W * pr); cv.height = Math.round((CH + 2) * pr);
     ctx = cv.getContext('2d'); ctx.setTransform(cv.width / W, 0, 0, cv.height / (CH + 2), 0, 0);
-    if (k === 1 && cfg.quality) { layers.push(null); break; }       // 精细画质下树冠逐棵绘制（会随风摆动），不需要缓存层
     if (k === 0) drawTerrain(ci * CH - 90, (ci + 1) * CH + 90);
-    else eachTree(ci * CH - 90, (ci + 1) * CH + 90, (x, d, s, v, rot) => { ctx.save(); ctx.translate(x, Y(d)); ctx.rotate(rot); ctx.scale(s, s); ctx.drawImage(TREES[v], -48, -48); ctx.restore(); });
+    else eachTree(ci * CH - 90, (ci + 1) * CH + 90, (x, d, s, v, rot) => { ctx.save(); ctx.translate(x, Y(d)); ctx.rotate(rot); ctx.scale(s, s); drawTree(v); ctx.restore(); });
     layers.push(cv);
   }
   ctx = main; baseY = sb; camD = sc;
@@ -1247,40 +1358,48 @@ function getChunk(ci) {
   return c;
 }
 
-// 空中的东西：飘落的树叶和偶尔飞过的鸟，各自带着落在地上的影子
-const sky = { leaves: [], birds: [], next: 6 };
+// 空中的东西：飘落的花瓣或树叶、偶尔飞过的白鹭、山谷里的薄雾，各自带着落在地上的影子
+const sky = { fall: [], birds: [], next: 6 };
 function drawSky() {
-  const want = TH.leaf > 0.5 ? 14 : TH.leaf > 0.2 ? 4 : 0;
-  while (sky.leaves.length < want) sky.leaves.push({ x: Math.random() * W, y: Math.random() * H, vy: 22 + Math.random() * 26, ph: Math.random() * 9, c: Math.random() * 3 | 0, s: 2.2 + Math.random() * 1.8 });
-  sky.leaves.length = Math.min(sky.leaves.length, want);
-  for (const f of sky.leaves) {
+  const want = TH.fall === 'leaf' ? 14 : TH.fall === 'petal' ? 11 : 0, PC = TH.fall === 'leaf' ? ['#d98a1e', '#b8432a', '#e3b83a'] : ['#f6c1cd', '#fbe3e8', '#f09bb0'];
+  while (sky.fall.length < want) sky.fall.push({ x: Math.random() * W, y: Math.random() * H, vy: 20 + Math.random() * 24, ph: Math.random() * 9, c: Math.random() * 3 | 0, s: 2.2 + Math.random() * 1.8 });
+  sky.fall.length = Math.min(sky.fall.length, want);
+  for (const f of sky.fall) {
     f.y += (f.vy + camSpeed * 1.12) * fdt; f.x += (Math.sin(T * 1.4 + f.ph) * 22 + 9) * fdt;         // 比地面离镜头近，所以滚动得比地面快
     if (f.y > H + 12) { f.y = -12; f.x = Math.random() * W; } else if (f.y < -40) f.y = H + 10;
     if (f.x > W + 10) f.x = -10;
     const rot = T * 1.6 + f.ph, flip = Math.cos(T * 2.3 + f.ph);
-    ctx.fillStyle = 'rgba(10,20,10,.16)'; oval(f.x + 12, f.y + 16, f.s, f.s * 0.5, rot); ctx.fill();
-    ctx.fillStyle = ['#d98a1e', '#b8432a', '#e3b83a'][f.c]; oval(f.x, f.y, f.s, f.s * (0.25 + 0.3 * Math.abs(flip)), rot); ctx.fill();
+    ctx.fillStyle = TH.shadow + '.14)'; oval(f.x + 12, f.y + 16, f.s, f.s * 0.5, rot); ctx.fill();
+    ctx.fillStyle = PC[f.c]; oval(f.x, f.y, f.s, f.s * (0.3 + 0.35 * Math.abs(flip)), rot); ctx.fill();
   }
   if (state === 'play' || state === 'ready' || state === 'menu') {
     if ((sky.next -= fdt) <= 0) {
       sky.next = 9 + Math.random() * 12;
       const dir = Math.random() < 0.5 ? 1 : -1, n = 1 + (Math.random() * 3 | 0), y0 = H * (0.15 + Math.random() * 0.5);
-      for (let k = 0; k < n; k++) sky.birds.push({ x: dir > 0 ? -20 - k * 22 : W + 20 + k * 22, y: y0 + k * 14 * (k % 2 ? 1 : -1), vx: dir * (120 + Math.random() * 20), vy: -34, ph: Math.random() * 6 });
+      for (let k = 0; k < n; k++) sky.birds.push({ x: dir > 0 ? -24 - k * 26 : W + 24 + k * 26, y: y0 + k * 16 * (k % 2 ? 1 : -1), vx: dir * (104 + Math.random() * 16), vy: -30, ph: Math.random() * 6 });
       if (state === 'play' && ac && !muted) sfx.bird();
     }
   }
-  for (let i = sky.birds.length - 1; i >= 0; i--) {
+  for (let i = sky.birds.length - 1; i >= 0; i--) {         // 白鹭：缓缓扇动的长翅膀
     const b = sky.birds[i]; b.x += b.vx * fdt; b.y += (b.vy + camSpeed * 1.2) * fdt;
-    if (b.x < -60 || b.x > W + 60 || b.y < -80 || b.y > H + 80) { sky.birds.splice(i, 1); continue; }
-    const flap = Math.sin(T * 13 + b.ph), wing = (ox, oy, al) => {
-      ctx.strokeStyle = `rgba(${al < 1 ? '8,18,10' : '38,34,30'},${al < 1 ? al : 1})`; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.beginPath();
-      ctx.moveTo(b.x + ox - 9, b.y + oy + flap * 4); ctx.quadraticCurveTo(b.x + ox - 4, b.y + oy - 2 - flap * 2, b.x + ox, b.y + oy);
-      ctx.quadraticCurveTo(b.x + ox + 4, b.y + oy - 2 - flap * 2, b.x + ox + 9, b.y + oy + flap * 4); ctx.stroke();
+    if (b.x < -70 || b.x > W + 70 || b.y < -90 || b.y > H + 90) { sky.birds.splice(i, 1); continue; }
+    const flap = Math.sin(T * 7 + b.ph), dir = Math.sign(b.vx);
+    const bird = (ox, oy, fill, line) => {
+      ctx.save(); ctx.translate(b.x + ox, b.y + oy); ctx.rotate(Math.atan2(b.vy, b.vx)); ctx.fillStyle = fill;
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(1, 0); ctx.quadraticCurveTo(2, s * 7, -3 - flap * 2, s * (13 + flap * 2)); ctx.quadraticCurveTo(-4, s * 5, -4, 0); ctx.closePath(); ctx.fill(); if (line) { ctx.strokeStyle = line; ctx.lineWidth = 0.6; ctx.stroke(); } }
+      oval(0, 0, 6.5, 2.1); ctx.fill(); if (line) ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(11, 0); ctx.lineWidth = 1.4; ctx.strokeStyle = line ? '#e3a23c' : fill; ctx.stroke();
+      ctx.restore();
     };
-    wing(26, 34, 0.2); wing(0, 0, 1);
-    ctx.fillStyle = '#26221e'; oval(b.x, b.y, 2.2, 3.4, Math.atan2(b.vy, b.vx) + Math.PI / 2); ctx.fill();
+    bird(26, 34, TH.shadow + '.16)', null); bird(0, 0, '#fdfbf4', ink(0.4));
+  }
+  if (TH.mist) for (let i = 0; i < 4; i++) {                // 山谷里慢慢飘的薄雾
+    const per = H + 520, y = (((camD * 0.85 + i * 330 + T * 6) % per) + per) % per - 260, x = W / 2 + Math.sin(T * 0.12 + i * 2.1) * 150, R = 190 + i * 22;
+    const g = ctx.createRadialGradient(x, H - y, 0, x, H - y, R); g.addColorStop(0, 'rgba(250,250,252,.26)'); g.addColorStop(1, 'rgba(250,250,252,0)');
+    ctx.save(); ctx.translate(x, H - y); ctx.scale(1.5, 0.55); ctx.translate(-x, -(H - y)); ctx.fillStyle = g; ctx.fillRect(x - R, H - y - R, R * 2, R * 2); ctx.restore();
   }
 }
+
 // 逻辑固定每秒 120 步，画面刷新率不一定是它的整数倍：绘制时在前后两步之间插值，滚动才不会一顿一顿
 let camI = 0, fdt = 1 / 60, lastCamI = 0, camSpeed = 0;
 function draw() {
@@ -1302,97 +1421,112 @@ function drawScene() {
   for (let ci = c0; ci <= c1; ci++) ctx.drawImage(getChunk(ci).below, 0, Y((ci + 1) * CH), W, CH + 2);
   if (!chunks.has(c1 + 1) && (d1 % CH + CH) % CH > CH * 0.5) getChunk(c1 + 1);      // 提前准备下一段
 
-  // 水面动态：流动的波纹与反光
+  // ---- 水面 ----
   const river = riverPath(d0, d1);
   ctx.save(); ctx.clip(river);
-  fillPattern(PAT.ripA, T * 5, camD - T * 72, 0.62, 3.3, 0.15);
-  if (cfg.quality) fillPattern(PAT.ripA, 90 - T * 4, camD - T * 108, 1.05, 5.4, 0.1);
-  if (cfg.quality) fillPattern(PAT.ripB, 40 + T * 4, camD - T * 88, 0.8, 2.2, 0.24, 'lighter');
+  // 顺流而下的留白笔触
+  fillPattern(PAT.streak, T * 3, camD - T * 72, 1, 1.5, 0.62);
+  if (cfg.quality) fillPattern(PAT.streak, 120 - T * 3, camD - T * 112, 1.7, 2.7, 0.34);
   // 顺着河道弯曲的水流线
-  ctx.lineCap = 'round'; ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round'; ctx.lineWidth = 1.3;
   for (let i = Math.floor(d0 / 170) - 2; i <= d1 / 170; i++) for (let k = 0; k < 3; k++) {
     const fr = (hash(i, 400 + k) + T * (0.16 + hash(i, 410 + k) * 0.12)) % 1, s0 = i * 170 + fr * 300, n = hash(i, 420 + k) * 1.7 - 0.85, len = 60 + hash(i, 430 + k) * 100;
-    ctx.strokeStyle = `rgba(255,255,255,${0.26 * Math.sin(fr * Math.PI)})`; ctx.beginPath();
+    ctx.strokeStyle = `rgba(255,255,255,${0.42 * Math.sin(fr * Math.PI)})`; ctx.beginPath();
     for (let d = s0; d <= s0 + len; d += 10) ctx.lineTo(riverCx(d) + n * riverW(d) + Math.sin(d * 0.06 + i) * 1.5, Y(d));
     ctx.stroke();
   }
+  // 随水漂的花瓣、落叶和泡沫
   for (const f of flecks) {
     const y = Y(f.d); if (y < -10 || y > H + 10) continue;
-    if (f.leaf) { ctx.fillStyle = ['#c9a227', '#a65f2b', '#86a03c'][f.c]; oval(f.x, y, f.r, f.r * 0.5, f.seed + T * 0.6); ctx.fill(); }
-    else { ctx.fillStyle = 'rgba(255,255,255,.5)'; circle(f.x, y, f.r); ctx.fill(); circle(f.x + f.r * 1.2, y + f.r * 0.6, f.r * 0.6); ctx.fill(); }
+    if (f.leaf) { ctx.fillStyle = TH.fleck[f.c]; oval(f.x, y, f.r, f.r * 0.55, f.seed + T * 0.6); ctx.fill(); }
+    else { ctx.fillStyle = 'rgba(255,255,255,.7)'; circle(f.x, y, f.r * 0.9); ctx.fill(); circle(f.x + f.r * 1.2, y + f.r * 0.6, f.r * 0.5); ctx.fill(); }
   }
-
+  // 涟漪
+  ctx.lineWidth = 1.2;
+  for (const r of ripples) {
+    const y = Y(r.d); if (y < -70 || y > H + 70) continue;
+    const t = 1 - r.life / r.max, rad = lerp(r.r0, r.r1, 1 - (1 - t) * (1 - t)), al = r.al * Math.pow(1 - t, 1.5);
+    ctx.strokeStyle = col(TH.deep, al * 0.35); oval(r.x + 0.8, y + 1.2, rad, rad * 0.92); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,255,255,${al * 1.2})`; oval(r.x, y, rad, rad * 0.92); ctx.stroke();
+    if (rad > 16) { ctx.strokeStyle = `rgba(255,255,255,${al * 0.55})`; oval(r.x, y, rad * 0.62, rad * 0.57); ctx.stroke(); }
+  }
+  // 跃出水面的鱼
+  if (fish) {
+    const p = fish.t / 0.55, fx = fish.x + fish.dir * 15 * p, h = Math.sin(Math.PI * p) * 11, fy = Y(fish.d);
+    ctx.fillStyle = TH.shadow + (0.26 * (1 - h / 16)).toFixed(3) + ')'; oval(fx + h * 0.4, fy + h * 0.55, 5, 2.2); ctx.fill();
+    ctx.save(); ctx.translate(fx, fy - h); ctx.rotate(fish.dir * (p - 0.5) * 1.6); ctx.scale((1 + h * 0.03) * fish.dir, 1 + h * 0.03);
+    ctx.fillStyle = '#a9bcc4'; oval(0, 0, 6, 2.3); ctx.fill(); ctx.strokeStyle = ink(0.5); ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(-9, -2.6); ctx.lineTo(-9, 2.6); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; oval(1, -0.7, 3.4, 0.8); ctx.fill(); ctx.restore();
+  }
   // 跌水
   for (const q of drops) {
     const y = Y(q.d); if (y < -160 || y > H + 90) continue;
     const xl = riverCx(q.d) - riverW(q.d) - 14, xr = riverCx(q.d) + riverW(q.d) + 14, a = q.x - q.half, b = q.x + q.half;
-    let g = ctx.createLinearGradient(0, y + 80, 0, y);                        // 落差上方：被拉平、发暗的光滑水面
-    g.addColorStop(0, 'rgba(8,46,58,0)'); g.addColorStop(1, 'rgba(8,46,58,.42)');
+    let g = ctx.createLinearGradient(0, y + 80, 0, y);                        // 落差上方：被拉平、颜色变深的水
+    g.addColorStop(0, col(TH.deep, 0)); g.addColorStop(1, col(TH.deep, 0.4));
     ctx.fillStyle = g; ctx.fillRect(xl, y, xr - xl, 80);
-    for (const [x0, x1] of [[xl, a], [b, xr]]) {                               // 水舌两侧：翻滚的白色回流
-      if (x1 - x0 < 4) continue;
-      ctx.save(); ctx.beginPath(); ctx.rect(x0, y - 60, x1 - x0, 60); ctx.clip();
-      g = ctx.createLinearGradient(0, y - 60, 0, y); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,.88)');
-      ctx.fillStyle = g; ctx.fillRect(x0, y - 60, x1 - x0, 60);
-      fillPattern(PAT.foam, T * 9, camD + T * 80, 0.9, 1.5, 0.7);
-      for (let k = 0; k < 9; k++) {
-        const bx = x0 + hash(q.seed * 31 + k, x0 | 0) * (x1 - x0), fr = (hash(q.seed, 50 + k) + T * (0.7 + hash(k, 3) * 0.5)) % 1;
-        ctx.fillStyle = `rgba(255,255,255,${0.75 * Math.sin(fr * Math.PI)})`; circle(bx, y - 44 + fr * 38, 4 + hash(k, 5) * 7); ctx.fill();
-      }
-      ctx.restore();
+    // 落差下方翻滚的白水：除了中间的水舌，整条河都是留白
+    ctx.save(); ctx.beginPath(); ctx.rect(xl, y - 62, xr - xl, 62); ctx.clip();
+    ctx.beginPath(); ctx.rect(xl - 10, y - 200, xr - xl + 20, 220); ctx.moveTo(a, y + 1); ctx.quadraticCurveTo(q.x - q.half * 0.55, y - 40, q.x, y - 86); ctx.quadraticCurveTo(q.x + q.half * 0.55, y - 40, b, y + 1); ctx.closePath(); ctx.clip('evenodd');
+    g = ctx.createLinearGradient(0, y - 62, 0, y); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.45, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,.95)');
+    ctx.fillStyle = g; ctx.fillRect(xl, y - 62, xr - xl, 62);
+    fillPattern(PAT.foam, T * 9, camD + T * 80, 0.9, 1.5, 0.6);
+    for (let k = 0; k < 16; k++) {
+      const bx = xl + hash(q.seed * 31 + k, 7) * (xr - xl), fr = (hash(q.seed, 50 + k) + T * (0.7 + hash(k, 3) * 0.5)) % 1;
+      ctx.fillStyle = `rgba(255,255,255,${0.8 * Math.sin(fr * Math.PI)})`; circle(bx, y - 46 + fr * 40, 4 + hash(k, 5) * 7); ctx.fill();
     }
-    g = ctx.createLinearGradient(0, y, 0, y - 86);                            // 水舌：光滑的深色 V 形
-    g.addColorStop(0, 'rgba(6,52,64,.62)'); g.addColorStop(1, 'rgba(6,52,64,0)');
+    ctx.restore();
+    g = ctx.createLinearGradient(0, y, 0, y - 86);                            // 水舌：一笔光滑的深色
+    g.addColorStop(0, col(TH.deep, 0.6)); g.addColorStop(1, col(TH.deep, 0));
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.lineTo(q.x, y - 86); ctx.closePath(); ctx.fill();
-    ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 3;
+    ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.88)'; ctx.lineWidth = 2.6;
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(q.x + s * q.half, y); ctx.quadraticCurveTo(q.x + s * q.half * 0.55, y - 40, q.x + s * 5 + Math.sin(T * 5 + s) * 2, y - 82); ctx.stroke(); }
     for (let k = 0; k < 3; k++) {                                              // 水舌下方的一串浪
       const wy = y - 98 - k * 26, ww = 36 - k * 6, wob = Math.sin(T * 6 + k * 2) * 1.5;
-      ctx.strokeStyle = `rgba(6,40,56,${0.3 - k * 0.07})`; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 9); ctx.quadraticCurveTo(q.x, wy + 4 + wob, q.x + ww, wy + 9); ctx.stroke();
-      ctx.strokeStyle = `rgba(255,255,255,${0.75 - k * 0.2})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 3); ctx.quadraticCurveTo(q.x, wy - 3 + wob, q.x + ww, wy + 3); ctx.stroke();
+      ctx.strokeStyle = col(TH.deep, 0.3 - k * 0.07); ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 9); ctx.quadraticCurveTo(q.x, wy + 4 + wob, q.x + ww, wy + 9); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.85 - k * 0.2})`; ctx.lineWidth = 2.8; ctx.setLineDash([14, 3, 7, 3]); ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 3); ctx.quadraticCurveTo(q.x, wy - 3 + wob, q.x + ww, wy + 3); ctx.stroke(); ctx.setLineDash([]);
     }
-    ctx.strokeStyle = 'rgba(2,24,34,.6)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(xl, y + 2.5); ctx.lineTo(xr, y + 2.5); ctx.stroke();      // 落差的边缘
-    ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 2.6;
+    ctx.strokeStyle = col(TH.deep, 0.75); ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(xl, y + 2); ctx.lineTo(xr, y + 2); ctx.stroke();        // 落差的边缘：一道重墨
+    ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.lineWidth = 2.4;
     for (const [x0, x1] of [[xl, a], [b, xr]]) { ctx.beginPath(); for (let x = x0; x <= x1; x += 9) ctx.lineTo(x, y - 0.5 + Math.sin(x * 0.4 + T * 7) * 1.2); ctx.stroke(); }
-    ctx.strokeStyle = 'rgba(200,236,236,.4)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.stroke();
   }
-  // 急流：白水 + 驻波
+  // 急流：干笔飞白 + 一道道浪
   for (const [a, b] of BOOSTS) {
     if (b < d0 || a > d1) continue;
-    const strip = (da, db, al) => { ctx.save(); ctx.beginPath(); ctx.rect(-30, Y(db), W + 60, db - da); ctx.clip(); fillPattern(PAT.foam, T * 10, camD - T * 200, 1.2, 3.4, al); ctx.restore(); };
-    strip(a + 100, b - 100, 0.42);
-    for (let k = 0; k < 4; k++) { strip(a + k * 25, a + k * 25 + 25, 0.42 * (k + 0.5) / 4); strip(b - k * 25 - 25, b - k * 25, 0.42 * (k + 0.5) / 4); }
+    const strip = (da, db, al) => { ctx.save(); ctx.beginPath(); ctx.rect(-30, Y(db), W + 60, db - da); ctx.clip(); fillPattern(PAT.foam, T * 10, camD - T * 200, 1.2, 3, al); ctx.restore(); };
+    strip(a + 100, b - 100, 0.44);
+    for (let k = 0; k < 4; k++) { strip(a + k * 25, a + k * 25 + 25, 0.44 * (k + 0.5) / 4); strip(b - k * 25 - 25, b - k * 25, 0.44 * (k + 0.5) / 4); }
     for (let d = Math.ceil(a / WAVE_GAP) * WAVE_GAP; d < b; d += WAVE_GAP) {
       const k = Math.min(1, (d - a) / 80, (b - d) / 80); if (k <= 0.05 || d < d0 || d > d1) continue;
       const row = d / WAVE_GAP | 0, cx = riverCx(d) + (hash(row, 4) - 0.5) * 40, w = riverW(d) * (0.5 + hash(row, 5) * 0.34), N = 12;
-      const pt = i => { const u = i / N * 2 - 1; return [cx + u * w, Y(d) + (1 - u * u) * -8 + Math.sin(i * 1.7 + row * 2.1) * 4 + Math.sin(T * 6 + i * 0.9 + row) * 1.6]; };
-      const trace = oy => { ctx.beginPath(); for (let i = 0; i <= N; i++) { const [px, py] = pt(i); ctx.lineTo(px, py + oy); } };
+      const trace = oy => { ctx.beginPath(); for (let i = 0; i <= N; i++) { const u = i / N * 2 - 1; ctx.lineTo(cx + u * w, Y(d) + (1 - u * u) * -8 + Math.sin(i * 1.7 + row * 2.1) * 4 + Math.sin(T * 6 + i * 0.9 + row) * 1.6 + oy); } };
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.strokeStyle = `rgba(6,40,56,${0.24 * k})`; ctx.lineWidth = 8; trace(7); ctx.stroke();       // 浪谷
-      ctx.strokeStyle = `rgba(225,245,245,${0.3 * k})`; ctx.lineWidth = 10; trace(0); ctx.stroke();   // 浪背
-      ctx.strokeStyle = `rgba(255,255,255,${0.85 * k})`; ctx.lineWidth = 2.8;
+      ctx.strokeStyle = col(TH.deep, 0.26 * k); ctx.lineWidth = 8; trace(7); ctx.stroke();            // 浪谷
+      ctx.strokeStyle = `rgba(255,255,255,${0.34 * k})`; ctx.lineWidth = 10; trace(0); ctx.stroke();  // 浪背
+      ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`; ctx.lineWidth = 2.6;
       ctx.setLineDash([8 + hash(row, 1) * 22, 6 + hash(row, 2) * 10, 16, 9, 5, 7]); ctx.lineDashOffset = hash(row, 3) * 40 + Math.sin(T * 3 + row) * 3; trace(-2); ctx.stroke(); ctx.setLineDash([]);
     }
   }
-  // 漩涡
+  // 漩涡：一团深色的晕染，几笔旋转的线
   for (const v of whirls) {
     const y = Y(v.d); if (y < -v.R || y > H + v.R) continue;
     const g = ctx.createRadialGradient(v.x, y, 0, v.x, y, v.R);
-    g.addColorStop(0, 'rgba(2,16,26,.85)'); g.addColorStop(0.16, 'rgba(4,28,42,.6)'); g.addColorStop(0.5, 'rgba(6,40,56,.25)'); g.addColorStop(1, 'rgba(6,40,56,0)');
+    g.addColorStop(0, col(TH.deep, 0.92)); g.addColorStop(0.16, col(TH.deep, 0.66)); g.addColorStop(0.5, col(TH.deep, 0.26)); g.addColorStop(1, col(TH.deep, 0));
     ctx.fillStyle = g; circle(v.x, y, v.R); ctx.fill();
     ctx.lineCap = 'round';
-    for (let arm = 0; arm < 3; arm++) for (let seg = 0; seg < 3; seg++) {      // 三条旋臂，越往外越淡
-      ctx.strokeStyle = `rgba(255,255,255,${0.62 - seg * 0.19})`; ctx.lineWidth = 3 - seg * 0.6; ctx.beginPath();
-      for (let r = 9 + seg * 27; r <= 38 + seg * 27; r += 3) {
-        const a = arm * TAU / 3 + v.dir * (r * 0.085 - T * 2.6); ctx.lineTo(v.x + Math.cos(a) * r, y - Math.sin(a) * r * 0.94);
-      }
-      ctx.stroke();
+    for (let arm = 0; arm < 3; arm++) for (let seg = 0; seg < 3; seg++) {
+      const pts = [];
+      for (let r = 9 + seg * 27; r <= 38 + seg * 27; r += 3) { const a = arm * TAU / 3 + v.dir * (r * 0.085 - T * 2.6); pts.push(v.x + Math.cos(a) * r, y - Math.sin(a) * r * 0.94); }
+      const path = off => { ctx.beginPath(); for (let i = 0; i < pts.length; i += 2) ctx.lineTo(pts[i] + off, pts[i + 1] + off); };
+      ctx.strokeStyle = col(TH.deep, 0.5 - seg * 0.13); ctx.lineWidth = 3.4 - seg * 0.6; path(1.6); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.78 - seg * 0.2})`; ctx.lineWidth = 2.4 - seg * 0.5; path(0); ctx.stroke();
     }
-    for (let k = 0; k < 10; k++) {                                              // 被卷着转的泡沫
+    for (let k = 0; k < 10; k++) {
       const r = 14 + hash(v.seed, k) * 76, a = hash(v.seed, 20 + k) * TAU - v.dir * T * (150 / (r + 20));
-      ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - r / v.R)})`; circle(v.x + Math.cos(a) * r, y - Math.sin(a) * r, 1.3 + hash(v.seed, 40 + k) * 1.8); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - r / v.R)})`; circle(v.x + Math.cos(a) * r, y - Math.sin(a) * r, 1.3 + hash(v.seed, 40 + k) * 1.8); ctx.fill();
     }
-    ctx.fillStyle = 'rgba(0,8,14,.8)'; oval(v.x, y, 6.5, 6); ctx.fill();
+    ctx.fillStyle = col([20, 30, 54], 0.85); oval(v.x, y, 6.5, 6); ctx.fill();
   }
   // 礁石后的尾流泡沫
   for (const r of rocks) {
@@ -1400,74 +1534,45 @@ function drawScene() {
     for (let k = 0; k < 12; k++) {
       const fr = (hash(r.seed, 40 + k) + T * (0.45 + hash(r.seed, 60 + k) * 0.3)) % 1, s = k % 2 ? 1 : -1;
       const fx = r.x + s * (r.r * (1.05 - fr * 0.55)) + Math.sin(T * 3 + k) * 2.5, fy = Y(r.d + r.r * 0.4 + fr * (70 + r.r * 2));
-      ctx.fillStyle = `rgba(255,255,255,${0.6 * (1 - fr) * (1 - fr)})`; circle(fx, fy, 1.4 + hash(r.seed, 80 + k) * 2.6); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - fr) * (1 - fr)})`; circle(fx, fy, 1.3 + hash(r.seed, 80 + k) * 2.4); ctx.fill();
     }
   }
-  // 涟漪
-  ctx.lineWidth = 1.4;
-  for (const r of ripples) {
-    const y = Y(r.d); if (y < -70 || y > H + 70) continue;
-    const t = 1 - r.life / r.max, rad = lerp(r.r0, r.r1, 1 - (1 - t) * (1 - t));
-    ctx.strokeStyle = `rgba(255,255,255,${r.al * Math.pow(1 - t, 1.5)})`; oval(r.x, y, rad, rad * 0.92); ctx.stroke();
-    if (rad > 16) { ctx.strokeStyle = `rgba(255,255,255,${r.al * 0.45 * Math.pow(1 - t, 1.5)})`; oval(r.x, y, rad * 0.62, rad * 0.57); ctx.stroke(); }
-  }
-  // 跃出水面的鱼
-  if (fish) {
-    const p = fish.t / 0.55, fx = fish.x + fish.dir * 15 * p, h = Math.sin(Math.PI * p) * 11, fy = Y(fish.d);
-    ctx.fillStyle = `rgba(0,18,26,${0.28 * (1 - h / 16)})`; oval(fx + h * 0.4, fy + h * 0.55, 5, 2.2); ctx.fill();
-    ctx.save(); ctx.translate(fx, fy - h); ctx.rotate(fish.dir * (p - 0.5) * 1.6); ctx.scale((1 + h * 0.03) * fish.dir, 1 + h * 0.03);
-    ctx.fillStyle = '#93a7ad'; oval(0, 0, 6, 2.3); ctx.fill(); ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(-9, -2.6); ctx.lineTo(-9, 2.6); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.7)'; oval(1, -0.7, 3.4, 0.8); ctx.fill(); ctx.restore();
-  }
-  // 岸边水沫
+  // 岸边断续的水沫
   ctx.setLineDash([7, 13, 3, 21, 11, 17]); ctx.lineDashOffset = T * 26; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3.4; ctx.stroke(river); ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 3; ctx.stroke(river); ctx.setLineDash([]);
   ctx.restore();
 
-  // 芦苇
+  // ---- 水边与水上的东西 ----
+  // 芦苇：艇经过时被水波推开
   ctx.lineCap = 'round';
   for (let i = Math.floor(d0 / 34) - 1; i <= d1 / 34 + 1; i++) for (const s of [-1, 1]) {
     if (hash(i, 100 + s) > TH.reeds) continue;
     const d = i * 34 + hash(i, 110 + s) * 28; if (Math.abs(d) < 30 || Math.abs(d - END) < 30) continue;
     const x = edgeX(d, s) - s * 2, y = Y(d), near = Math.max(0, 1 - Math.hypot(x - raft.x, d - raft.d) / 64);
-    const sway = Math.sin(T * 1.6 + i) * 2 + near * near * (x > raft.x ? 1 : -1) * 8 * Math.min(1, Math.hypot(raft.vx, raft.vd) / 110) + Math.sin(T * 9 + i) * near * 1.5;      // 艇掀起的水波把芦苇推开
+    const sway = Math.sin(T * 1.6 + i) * 2 + near * near * (x > raft.x ? 1 : -1) * 8 * Math.min(1, Math.hypot(raft.vx, raft.vd) / 110) + Math.sin(T * 9 + i) * near * 1.5;
     for (let k = -2; k <= 2; k++) {
-      ctx.strokeStyle = k % 2 ? '#2f6a2b' : '#5d9440'; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = col(k % 2 ? TH.tuft : mixc(TH.tuft, [214, 222, 150], 0.5), 0.85); ctx.lineWidth = 1.3;
       ctx.beginPath(); ctx.moveTo(x + k * 2.2, y + 4); ctx.quadraticCurveTo(x + k * 3, y - 4, x + k * 4.4 + sway - s * 2, y - 9 - (2 - Math.abs(k)) * 2.5); ctx.stroke();
     }
   }
-
-  drawBanner(0, '起点', '#ffffff', '#339af0');
-  drawBanner(END, '终点', '#ffffff', '#e03131');
-
+  drawBanner(0, '起点'); drawBanner(END, '终点');
   // 尾迹
-  for (const k of wake) {
-    ctx.fillStyle = `rgba(255,255,255,${Math.min(1, k.life) * 0.5})`;
-    circle(k.x, Y(k.d), k.r * (1.7 - k.life * 0.6)); ctx.fill();
-  }
-  // 星星
+  for (const k of wake) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, k.life) * 0.6})`; circle(k.x, Y(k.d), k.r * (1.6 - k.life * 0.6)); ctx.fill(); }
+  // 莲花
   for (const c of coins) {
     if (c.got || c.d < d0 || c.d > d1) continue;
-    const y = Y(c.d) + Math.sin(T * 3 + c.d) * 2.5;
-    ctx.fillStyle = 'rgba(0,18,26,.25)'; star(c.x + 4, y + 6, 9, 0); ctx.fill();
-    ctx.fillStyle = 'rgba(255,236,150,.22)'; circle(c.x, y, 15); ctx.fill();
-    const g = ctx.createLinearGradient(c.x - 8, y - 9, c.x + 8, y + 9); g.addColorStop(0, '#fff3b0'); g.addColorStop(0.5, '#ffd23f'); g.addColorStop(1, '#e09b00');
-    star(c.x, y, 10, Math.sin(T * 2 + c.d) * 0.25); ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = '#a66f00'; ctx.lineWidth = 1.2; ctx.stroke();
+    const ph = T * 2.4 + c.d, y = Y(c.d) + Math.sin(ph) * 1.5;
+    ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.2 * Math.sin(ph)})`; ctx.lineWidth = 1.1; oval(c.x, y + 1, 18.5 + Math.sin(ph) * 1.5, 17 + Math.sin(ph) * 1.5); ctx.stroke();
+    ctx.fillStyle = TH.shadow + '.2)'; oval(c.x + 3, y + 5, 14.5, 13); ctx.fill();
+    ctx.save(); ctx.translate(c.x, y); ctx.rotate(Math.sin(T * 0.9 + c.d * 0.7) * 0.3 + c.d); ctx.drawImage(LOTUS, -20, -20, 40, 40); ctx.restore();
   }
   // 救生圈
   for (const g of rings) {
     if (g.got || g.d < d0 || g.d > d1) continue;
     const y = Y(g.d) + Math.sin(T * 2.5 + g.d) * 2;
-    ctx.fillStyle = 'rgba(0,18,26,.3)'; ctx.beginPath(); ctx.arc(g.x + 4, y + 6, 13.5, 0, TAU); ctx.arc(g.x + 4, y + 6, 6.5, 0, TAU, true); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 1.5; circle(g.x, y, 17 + Math.sin(T * 3) * 1.5); ctx.stroke();
-    ctx.save(); ctx.translate(g.x, y); ctx.rotate(T * 0.6);
-    ctx.lineWidth = 7; ctx.strokeStyle = '#f4f4f0'; circle(0, 0, 10); ctx.stroke();
-    ctx.strokeStyle = '#e03131'; ctx.lineCap = 'butt';
-    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(0, 0, 10, i * Math.PI / 2, i * Math.PI / 2 + 0.75); ctx.stroke(); }
-    ctx.restore();
-    const hl = ctx.createRadialGradient(g.x - 5, y - 6, 1, g.x, y, 14); hl.addColorStop(0, 'rgba(255,255,255,.5)'); hl.addColorStop(0.6, 'rgba(255,255,255,0)'); hl.addColorStop(1, 'rgba(0,0,0,.25)');
-    ctx.strokeStyle = hl; ctx.lineWidth = 7; circle(g.x, y, 10); ctx.stroke();
+    ctx.fillStyle = TH.shadow + '.26)'; ctx.beginPath(); ctx.arc(g.x + 4, y + 6, 14.5, 0, TAU); ctx.arc(g.x + 4, y + 6, 7.4, 0, TAU, true); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.2; circle(g.x, y, 19 + Math.sin(T * 3) * 1.5); ctx.stroke();
+    ctx.save(); ctx.translate(g.x, y); ctx.rotate(T * 0.5); ctx.drawImage(RING, -22, -22, 44, 44); ctx.restore();
   }
   for (const r of rocks) if (r.d > d0 - 40 && r.d < d1 + 40) drawRock(r);
   for (const l of logs) if ((l.on || l.fade < 1 && l.fade > 0) && l.d > d0 - 40 && l.d < d1 + 40) drawLog(l);
@@ -1477,152 +1582,157 @@ function drawScene() {
 
   for (const p of particles) {
     const al = clamp(p.life / p.max, 0, 1), z = p.z || 0;
-    if (z > 2) { ctx.globalAlpha = al * 0.18; ctx.fillStyle = '#012'; circle(p.x + z * 0.35, Y(p.d) + z * 0.5, p.r); ctx.fill(); }
+    if (z > 2) { ctx.globalAlpha = al * 0.22; ctx.fillStyle = col(TH.deep); circle(p.x + z * 0.35, Y(p.d) + z * 0.5, p.r); ctx.fill(); }
     ctx.globalAlpha = al; ctx.fillStyle = p.color; circle(p.x, Y(p.d) - z * 0.55, p.r * (1 + z * 0.012)); ctx.fill();
   }
   ctx.globalAlpha = 1;
-  // 急流上的水雾
-  if (cfg.quality) for (const q of drops) {
-    const y = Y(q.d) - 34; if (y < -120 || y > H + 120) continue;
-    const x = riverCx(q.d), R = 130, g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, 'rgba(255,255,255,.2)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.5); ctx.translate(-x, -y); ctx.fillStyle = g; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();
-  }
-  if (cfg.quality) for (const [a, b] of BOOSTS) {
-    if (b < d0 || a > d1) continue;
-    for (let d = a + 60; d < b - 40; d += 120) {
-      const k = Math.floor(d / 120), x = riverCx(d) + Math.sin(T * 0.5 + k) * 40, y = Y(d + Math.sin(T * 0.3 + k * 2) * 30), R = 80;
-      if (y < -R || y > H + R) continue;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, 'rgba(255,255,255,.13)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g; ctx.fillRect(x - R, y - R, R * 2, R * 2);
+  // 跌水和急流上的水雾
+  const haze = (x, y, R, al, squash) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, `rgba(255,255,255,${al})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, squash); ctx.translate(-x, -y); ctx.fillStyle = g; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();
+  };
+  if (cfg.quality) {
+    for (const q of drops) { const y = Y(q.d) - 34; if (y > -120 && y < H + 120) haze(riverCx(q.d), y, 130, 0.26, 0.5); }
+    for (const [a, b] of BOOSTS) {
+      if (b < d0 || a > d1) continue;
+      for (let d = a + 60; d < b - 40; d += 120) {
+        const k = Math.floor(d / 120), y = Y(d + Math.sin(T * 0.3 + k * 2) * 30); if (y < -80 || y > H + 80) continue;
+        haze(riverCx(d) + Math.sin(T * 0.5 + k) * 40, y, 80, 0.16, 1);
+      }
     }
   }
   for (const b of BRIDGES) drawBridge(b);
   for (const k of ducks) if (k.fly && k.d > d0 && k.d < d1 + 60) drawDuck(k);
-  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(1.035, 1.035); ctx.translate(-W / 2, -H / 2);       // 树冠比地面高：略微放大，移动时产生视差
-  if (cfg.quality) eachTree(d0, d1, (x, d, k, v, rot, i) => {          // 一阵阵的风吹过，树冠轻轻摆动
+  // 树冠比地面高：略微放大，移动时产生视差；精细画质下逐棵绘制，随一阵阵的风摆动
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(1.035, 1.035); ctx.translate(-W / 2, -H / 2);
+  if (cfg.quality) eachTree(d0, d1, (x, d, k, v, rot, i) => {
     const ph = T * 1.1 + x * 0.013 + d * 0.009, g = Math.sin(ph) * 0.6 + Math.sin(ph * 2.3 + i) * 0.3;
-    ctx.save(); ctx.translate(x + g * 1.7 * k, Y(d) + g * 0.7 * k); ctx.rotate(rot + g * 0.028); ctx.scale(k, k); ctx.drawImage(TREES[v], -48, -48); ctx.restore();
+    ctx.save(); ctx.translate(x + g * 1.7 * k, Y(d) + g * 0.7 * k); ctx.rotate(rot + g * 0.028); ctx.scale(k, k); drawTree(v); ctx.restore();
   });
   else for (let ci = c0; ci <= c1; ci++) ctx.drawImage(getChunk(ci).above, 0, Y((ci + 1) * CH), W, CH + 2);
   ctx.restore();
   if (cfg.quality) drawSky();
 
-  // 飘字
-  for (const f of floaters) { ctx.globalAlpha = clamp(f.life * 2, 0, 1); outlined(f.text, f.x, Y(f.d), f.size * (1 + 0.45 * clamp((f.life - 0.86) / 0.14, 0, 1)), f.color); }
+  // 飘字与提示
+  for (const f of floaters) { ctx.globalAlpha = clamp(f.life * 2, 0, 1); inkText(f.text, f.x, Y(f.d), f.size * (1 + 0.45 * clamp((f.life - 0.86) / 0.14, 0, 1)), f.color, 'center', KAI, 700); }
   ctx.globalAlpha = 1;
-  // 提示
   for (const [d, text] of SIGNS) {
     const y = Y(d + 150); if (y < -30 || y > H + 30) continue;
-    ctx.globalAlpha = clamp(Math.min((H - y) / 120, (y - 60) / 120), 0, 1);
-    outlined(text, W / 2, y, 19, '#fff8dc');
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = clamp(Math.min((H - y) / 120, (y - 70) / 110), 0, 1); paperTag(text, W / 2, y, 16); ctx.globalAlpha = 1;
   }
   ctx.restore();
 
-  // 暗角
-  if (!vignette || vignette.h !== H) { vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
-    vignette.addColorStop(0, 'rgba(0,14,20,0)'); vignette.addColorStop(1, 'rgba(0,14,20,.36)'); vignette.h = H; }
+  // 画的四周渐渐淡回纸色
+  if (!vignette || vignette.h !== H) {
+    vignette = ctx.createRadialGradient(W / 2, H * 0.52, H * 0.34, W / 2, H * 0.52, H * 0.8);
+    vignette.addColorStop(0, 'rgba(246,239,222,0)'); vignette.addColorStop(1, 'rgba(246,239,222,.5)'); vignette.h = H;
+  }
   ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
-  if (TH.grade) { ctx.fillStyle = TH.grade; ctx.fillRect(0, 0, W, H); }      // 夕阳的暖色调
-
-  if (flash > 0) { ctx.fillStyle = `rgba(255,60,60,${flash * 1.2})`; ctx.fillRect(0, 0, W, H); }
-  for (const c of confetti) {
+  if (TH.grade) { ctx.fillStyle = TH.grade; ctx.fillRect(0, 0, W, H); }
+  if (flash > 0) {              // 撞击：四周泛起一圈朱红
+    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
+    g.addColorStop(0, 'rgba(196,72,50,0)'); g.addColorStop(1, `rgba(196,72,50,${Math.min(0.6, flash * 2.6)})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  for (const c of confetti) {    // 通关时落下的花瓣
     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot); ctx.fillStyle = c.c;
-    const hh = c.s * 0.6 * Math.cos(c.rot * 2); ctx.fillRect(-c.s / 2, -hh / 2, c.s, hh); ctx.restore();
+    oval(0, 0, c.s * 0.75, c.s * 0.36 * (0.35 + 0.65 * Math.abs(Math.cos(c.rot * 2)))); ctx.fill(); ctx.restore();
   }
   if (state !== 'menu') drawHUD();
   if (state === 'ready') {
     const n = Math.ceil(countdown / 0.7), fr = countdown / 0.7 - (n - 1);
-    ctx.globalAlpha = clamp(fr * 2.5, 0, 1);
-    outlined(String(n), W / 2, H * 0.4, 90 + (1 - fr) * 50, '#ffe066');
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = clamp(fr * 2.5, 0, 1); inkText(String(n), W / 2, H * 0.4, 96 + (1 - fr) * 44, INK, 'center', KAI, 700); ctx.globalAlpha = 1;
   } else if (state === 'play' && raft.time < 0.8) {
-    ctx.globalAlpha = 1 - raft.time / 0.8; outlined('出发！', W / 2, H * 0.4, 56 + raft.time * 30, '#ffe066'); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1 - raft.time / 0.8; inkText('出发', W / 2, H * 0.4, 60 + raft.time * 30, INK, 'center', KAI, 700); ctx.globalAlpha = 1;
   }
 }
 let vignette = null;
 
+// ---- 界面：尽量少、尽量轻，像写在画边上的小字 ----
 const BTN = { pause: [28, 64], mute: [62, 64], r: 14 };
-function drawHUD() {
-  const g = ctx.createLinearGradient(0, 0, 0, 90);
-  g.addColorStop(0, 'rgba(6,30,40,.66)'); g.addColorStop(1, 'rgba(6,30,40,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 90);
-  for (let i = 0; i < 3; i++) {
-    const lost = i >= raft.hp, jig = i === raft.hp && raft.squash > 0 ? Math.sin(T * 60) * 3 : 0;
-    const pop = hud.gain && hud.gain.i === i ? 1 + 0.6 * Math.max(0, 1 - hud.gain.t) : !lost && raft.hp === 1 ? 1 + Math.sin(T * 7) * 0.08 : 1;      // 补气时弹一下；只剩一格时心跳
-    heart(26 + i * 30 + jig, 27, 10 * pop);
-    ctx.fillStyle = lost ? 'rgba(255,255,255,.22)' : '#ff4d4f'; ctx.fill();
-    ctx.strokeStyle = 'rgba(6,30,40,.8)'; ctx.lineWidth = 2; ctx.stroke();
-    if (!lost) { ctx.fillStyle = 'rgba(255,255,255,.6)'; circle(22 + i * 30, 23, 2.2); ctx.fill(); }
+const TEAL = '#2f6f7a', OCHRE = '#a8741a', VERMILION = '#b8452f', MOSS = '#6f8f5a';
+function airCell(x, y, r, full, alpha = 1) {       // 一格气囊
+  ctx.globalAlpha = alpha;
+  if (full) {
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r); g.addColorStop(0, '#f8b199'); g.addColorStop(0.55, '#e46f51'); g.addColorStop(1, '#b34a35');
+    ctx.fillStyle = g; circle(x, y, r); ctx.fill(); ctx.strokeStyle = ink(0.65); ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; oval(x - r * 0.35, y - r * 0.4, r * 0.3, r * 0.18, -0.6); ctx.fill();
+  } else {
+    ctx.fillStyle = paperA(0.55); circle(x, y, r); ctx.fill(); ctx.setLineDash([3, 2.4]); ctx.strokeStyle = ink(0.45); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
   }
+  ctx.globalAlpha = 1;
+}
+function drawHUD() {
+  const g = ctx.createLinearGradient(0, 0, 0, 104);
+  g.addColorStop(0, paperA(0.82)); g.addColorStop(0.6, paperA(0.4)); g.addColorStop(1, paperA(0));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 104);
   // 界面动效用真实帧时间推进
   if (hud.gain && (hud.gain.t += fdt * 3) > 1) hud.gain = null;
   hud.starBump = Math.max(0, hud.starBump - fdt * 5); hud.score += (raft.score - hud.score) * Math.min(1, fdt * 9);
+  for (let i = 0; i < 3; i++) {
+    const lost = i >= raft.hp, jig = i === raft.hp && raft.squash > 0 ? Math.sin(T * 60) * 2.5 : 0;
+    const pop = hud.gain && hud.gain.i === i ? 1 + 0.6 * Math.max(0, 1 - hud.gain.t) : !lost && raft.hp === 1 ? 1 + Math.sin(T * 7) * 0.09 : 1;      // 补气时弹一下；只剩一格时一鼓一鼓
+    airCell(25 + i * 25 + jig, 27, 9 * pop, !lost);
+  }
   for (let i = hud.fx.length - 1; i >= 0; i--) {
     const f = hud.fx[i];
-    if (f.kind === 'heart') {          // 失去的那格气囊：碎裂下坠
+    if (f.kind === 'heart') {          // 失去的那格气囊：瘪下去、飘落
       f.t += fdt * 1.7; if (f.t >= 1) { hud.fx.splice(i, 1); continue; }
-      ctx.save(); ctx.translate(26 + f.i * 30 + f.t * 6, 27 + f.t * f.t * 46); ctx.rotate(f.t * 0.9); ctx.globalAlpha = 1 - f.t;
-      heart(0, 0, 10 * (1 + 0.3 * (1 - f.t))); ctx.fillStyle = '#ff4d4f'; ctx.fill(); ctx.restore();
-    } else {                             // 吃到的星星：飞向计数器
+      airCell(25 + f.i * 25 + f.t * 8, 27 + f.t * f.t * 46, 9 * (1 - f.t * 0.5), true, 1 - f.t);
+    } else {                             // 采到的莲花：飘向计数处
       if (f.sx === undefined) { f.sx = f.wx; f.sy = Y(f.wd); }
       f.t += fdt * 2.6; if (f.t >= 1) { hud.fx.splice(i, 1); hud.starBump = 1; continue; }
-      const e = f.t * f.t * (3 - 2 * f.t), fx = lerp(f.sx, W / 2 - 34, e) + Math.sin(e * Math.PI) * 26, fy = lerp(f.sy, 26, e);
-      ctx.globalAlpha = 0.35; star(lerp(f.sx, fx, 0.8), lerp(f.sy, fy, 0.86), 7 - e * 2, e * 5); ctx.fillStyle = '#ffe066'; ctx.fill();
-      ctx.globalAlpha = 1; star(fx, fy, 10 - e * 2, e * 6); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#a66f00'; ctx.lineWidth = 1; ctx.stroke();
+      const e = f.t * f.t * (3 - 2 * f.t), fx = lerp(f.sx, W / 2 - 36, e) + Math.sin(e * Math.PI) * 26, fy = lerp(f.sy, 27, e), s = 44 * (1 - e * 0.42);
+      ctx.save(); ctx.translate(fx, fy); ctx.rotate(e * 3); ctx.drawImage(LOTUS, -s / 2, -s / 2, s, s); ctx.restore();
     }
   }
-  ctx.globalAlpha = 1;
-  star(W / 2 - 34, 26, 11 * (1 + hud.starBump * 0.35)); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#8a6100'; ctx.lineWidth = 1.5; ctx.stroke();
-  outlined(`${raft.coins}/${coins.length}`, W / 2 - 18, 27, 18 + hud.starBump * 3, '#fff', 'left');
-  if (raft.combo >= 3) outlined(`连击 ×${raft.combo}`, W / 2, 52, 14 + Math.min(raft.combo, 20) * 0.2, '#ffe066');
-  outlined(raft.time.toFixed(1) + ' 秒', W - 16, 27, 18, '#fff', 'right');
-  outlined(String(Math.round(hud.score)), W - 34, 52, 14 + Math.min(4, Math.abs(raft.score - hud.score) * 0.02), '#d8f3f5', 'right');
-  for (const key of ['pause', 'mute']) {
+  const ls = 27 * (1 + hud.starBump * 0.3);
+  ctx.drawImage(LOTUS, W / 2 - 36 - ls / 2, 27 - ls / 2, ls, ls);
+  inkText(`${raft.coins}/${coins.length}`, W / 2 - 17, 28, 18 + hud.starBump * 3, INK, 'left');
+  if (raft.combo >= 3) inkText(`连击 ×${raft.combo}`, W / 2, 53, 13 + Math.min(raft.combo, 20) * 0.15, OCHRE, 'center', KAI);
+  inkText(raft.time.toFixed(1) + ' 秒', W - 16, 28, 17, INK, 'right');
+  inkText(String(Math.round(hud.score)), W - 34, 52, 13 + Math.min(4, Math.abs(raft.score - hud.score) * 0.02), TEAL, 'right');
+  for (const key of ['pause', 'mute']) {       // 暂停 / 声音：两枚小纸钮
     const [bx, by] = BTN[key];
-    ctx.fillStyle = 'rgba(6,30,40,.55)'; circle(bx, by, BTN.r); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
-    if (key === 'pause') { ctx.fillRect(bx - 5, by - 6, 3.5, 12); ctx.fillRect(bx + 1.5, by - 6, 3.5, 12); }
+    ctx.fillStyle = paperA(0.88); circle(bx, by, BTN.r); ctx.fill(); ctx.strokeStyle = ink(0.5); ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.fillStyle = INK; ctx.strokeStyle = INK;
+    if (key === 'pause') { ctx.fillRect(bx - 4.6, by - 5.5, 3.2, 11); ctx.fillRect(bx + 1.4, by - 5.5, 3.2, 11); }
     else {
       ctx.beginPath(); ctx.moveTo(bx - 7, by - 2.5); ctx.lineTo(bx - 3.5, by - 2.5); ctx.lineTo(bx + 0.5, by - 6.5); ctx.lineTo(bx + 0.5, by + 6.5); ctx.lineTo(bx - 3.5, by + 2.5); ctx.lineTo(bx - 7, by + 2.5); ctx.fill();
-      ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.beginPath();
+      ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.beginPath();
       if (muted) { ctx.moveTo(bx + 3, by - 3.5); ctx.lineTo(bx + 8, by + 3.5); ctx.moveTo(bx + 8, by - 3.5); ctx.lineTo(bx + 3, by + 3.5); }
       else { ctx.arc(bx + 1, by, 4.5, -0.8, 0.8); ctx.moveTo(bx + 6.2, by - 5.4); ctx.arc(bx + 1, by, 7.5, -0.8, 0.8); }
       ctx.stroke();
     }
   }
-  { // 体力条
-    const x0 = 14, y0 = 86, w = 62, col = raft.tired ? '#ff8787' : raft.stam < 0.35 ? '#ffd43b' : '#8ce99a';
-    ctx.fillStyle = 'rgba(6,30,40,.55)'; ctx.beginPath(); ctx.roundRect(x0, y0, w, 7, 3.5); ctx.fill();
-    ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(x0 + 1, y0 + 1, Math.max(5, (w - 2) * raft.stam), 5, 2.5); ctx.fill();
-    outlined(raft.sprint ? '冲刺！' : raft.tired ? '喘口气…' : '体力', x0 + w + 6, y0 + 4, 11, col, 'left');
+  { // 体力
+    const x0 = 14, y0 = 86, w = 62, c = raft.tired ? VERMILION : raft.stam < 0.35 ? OCHRE : MOSS;
+    ctx.fillStyle = paperA(0.8); ctx.beginPath(); ctx.roundRect(x0, y0, w, 7, 3.5); ctx.fill(); ctx.strokeStyle = ink(0.4); ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.fillStyle = c; ctx.globalAlpha = raft.tired ? 0.6 + 0.4 * Math.sin(T * 9) : 1; ctx.beginPath(); ctx.roundRect(x0 + 1.2, y0 + 1.2, Math.max(4.6, (w - 2.4) * raft.stam), 4.6, 2.3); ctx.fill(); ctx.globalAlpha = 1;
+    inkText(raft.sprint ? '冲刺' : raft.tired ? '喘口气…' : '体力', x0 + w + 6, y0 + 4, 11, c, 'left');
   }
-  const bx = W - 16, by0 = 96, by1 = H - 150, p = clamp(raft.d / END, 0, 1);
-  ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(6,30,40,.55)'; ctx.lineWidth = 8;
-  ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
-  ctx.strokeStyle = '#8fe3f0'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(bx, by1); ctx.lineTo(bx, by1 - (by1 - by0) * p); ctx.stroke();
-  ctx.fillStyle = '#f76707'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-  oval(bx, by1 - (by1 - by0) * p, 6, 9); ctx.fill(); ctx.stroke();
-  outlined('终', bx, by0 - 15, 13, '#fff');
-  if (state === 'play' && raft.hole > 0.15) outlined('回流！全力划出去', W / 2, 84, 17 + Math.sin(T * 14) * 1.2, '#ffd8a8');
-  else if (boostAt(raft.d) > 0.5 && state === 'play') outlined('急  流', W / 2, 84, 17, '#d8f3f5');
-  if (toast && toast.t > 0) { ctx.globalAlpha = Math.min(1, toast.t); outlined(toast.text, W / 2, 112, 13, '#fff8dc'); ctx.globalAlpha = 1; }
+  // 行程：一条细线，上面一只小艇
+  const bx = W - 16, by0 = 96, by1 = H - 150, p = clamp(raft.d / END, 0, 1), py = by1 - (by1 - by0) * p;
+  ctx.lineCap = 'round'; ctx.strokeStyle = paperA(0.8); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
+  ctx.strokeStyle = ink(0.4); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
+  ctx.strokeStyle = TEAL; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(bx, by1); ctx.lineTo(bx, py); ctx.stroke();
+  ctx.fillStyle = '#e46f51'; oval(bx, py, 5, 8); ctx.fill(); ctx.strokeStyle = ink(0.7); ctx.lineWidth = 1; ctx.stroke();
+  inkText('终', bx, by0 - 14, 12, INK, 'center', KAI);
+  if (state === 'play' && raft.hole > 0.15) inkText('回流！全力划出去', W / 2, 86, 17 + Math.sin(T * 14) * 1.2, VERMILION, 'center', KAI, 700);
+  else if (boostAt(raft.d) > 0.5 && state === 'play') inkText('急　流', W / 2, 86, 17, TEAL, 'center', KAI, 700);
+  if (toast && toast.t > 0) { ctx.globalAlpha = Math.min(1, toast.t); paperTag(toast.text, W / 2, 116, 12); ctx.globalAlpha = 1; }
+  // 触屏按钮：三枚淡淡的纸钮
   if (isTouch && (state === 'play' || state === 'ready')) {
-    const sx = W / 2, sy = H - 66, ease = Math.min(1, fdt * 18);              // 按钮按下、松开都有一小段过渡
+    const sx = W / 2, sy = H - 66, ease = Math.min(1, fdt * 18);              // 按下、松开都有一小段过渡
     hud.L += ((input.L ? 1 : 0) - hud.L) * ease; hud.R += ((input.R ? 1 : 0) - hud.R) * ease; hud.S += ((input.S && !raft.tired ? 1 : 0) - hud.S) * ease;
-    ctx.fillStyle = `rgba(255,${255 - 43 * hud.S | 0},${255 - 196 * hud.S | 0},${0.16 + 0.34 * hud.S})`; circle(sx, sy, 36 + hud.S * 3); ctx.fill();
-    ctx.strokeStyle = raft.tired ? 'rgba(255,135,135,.9)' : 'rgba(255,255,255,.85)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(sx, sy, 36, -Math.PI / 2, -Math.PI / 2 + TAU * raft.stam); ctx.stroke();
-    ctx.lineWidth = 4; ctx.lineJoin = 'round';
+    ctx.fillStyle = paperA(0.3 + 0.4 * hud.S); circle(sx, sy, 36 + hud.S * 3); ctx.fill(); ctx.strokeStyle = ink(0.3); ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = raft.tired ? VERMILION : MOSS; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(sx, sy, 36 + hud.S * 3, -Math.PI / 2, -Math.PI / 2 + TAU * raft.stam); ctx.stroke();
+    ctx.strokeStyle = ink(0.75); ctx.lineWidth = 3; ctx.lineJoin = 'round';
     for (const oy of [-9, 3]) { ctx.beginPath(); ctx.moveTo(sx - 12, sy + oy + 8); ctx.lineTo(sx, sy + oy - 4); ctx.lineTo(sx + 12, sy + oy + 8); ctx.stroke(); }
     for (const [s, on] of [[-1, hud.L], [1, hud.R]]) {
       const x = W / 2 + s * (W / 2 - 62), y = H - 70;
-      ctx.fillStyle = `rgba(255,255,255,${0.16 + 0.26 * on})`;
-      circle(x, y, 42 + on * 3); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.85)';
-      ctx.beginPath(); ctx.moveTo(x + s * 18, y); ctx.lineTo(x - s * 10, y - 18); ctx.lineTo(x - s * 10, y + 18); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = paperA(0.3 + 0.4 * on); circle(x, y, 42 + on * 3); ctx.fill(); ctx.strokeStyle = ink(0.3); ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = ink(0.75); ctx.beginPath(); ctx.moveTo(x + s * 17, y); ctx.lineTo(x - s * 9, y - 16); ctx.lineTo(x - s * 9, y + 16); ctx.closePath(); ctx.fill();
     }
   }
 }
@@ -1634,7 +1744,9 @@ function show(html, buttons) {
   overlay.classList.remove('hidden');
   panel.querySelectorAll('button[data-i]').forEach(b => { b.onclick = e => { e.stopPropagation(); buttons[b.dataset.i][1](); }; });
 }
-const starsHtml = n => `<div class="stars">${[0, 1, 2].map(i => `<span class="${i < n ? 'on' : 'off'}" style="--i:${i}">★</span>`).join('')}</div>`;
+// 评价用莲花表示：最多三朵
+const starsHtml = n => `<div class="stars">${[0, 1, 2].map(i => `<img class="${i < n ? 'on' : 'off'}" style="--i:${i}" src="${LOTUS_URL}" alt="">`).join('')}</div>`;
+const lotusRow = n => [0, 1, 2].map(i => `<img class="lt${i < n ? '' : ' off'}" src="${LOTUS_URL}" alt="">`).join('');
 const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ',');
 
 // 通关上一关才解锁下一关
@@ -1643,14 +1755,14 @@ function showMenu() {
   state = 'menu';
   const cards = LEVELS.map((lv, i) => {
     const b = store.get(bestKey(lv), null);
-    if (!unlocked(i)) return `<div class="lv locked"><b><i class="lock"></i>${lvTitle(lv)}</b><span>通关「${LEVELS[i - 1].name}」后解锁</span></div>`;
-    return `<div class="lv${lv === LV ? ' sel' : ''}" data-lv="${i}"><b>${lvTitle(lv)}</b><span>${b ? `${'★'.repeat(b.stars)}${'☆'.repeat(3 - b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒` : lv.intro}</span></div>`;
+    if (!unlocked(i)) return `<div class="lv locked" style="--c:${THEMES[lv.theme].accent}"><b><i class="lock"></i>${lvTitle(lv)}</b><span>通关「${LEVELS[i - 1].name}」后解锁</span></div>`;
+    return `<div class="lv${lv === LV ? ' sel' : ''}" data-lv="${i}" style="--c:${THEMES[lv.theme].accent}"><b>${lvTitle(lv)}</b><span>${b ? `${lotusRow(b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒` : lv.intro}</span></div>`;
   }).join('');
   const total = LEVELS.reduce((n, lv) => n + ((store.get(bestKey(lv), null) || {}).stars || 0), 0);
-  show(`<h1>橡皮艇漂流</h1><h2>选择关卡　<span style="color:#ffd23f">★ ${total}/${LEVELS.length * 3}</span></h2>${cards}
+  show(`<h1>橡皮艇漂流</h1><h2>选择关卡 <img class="lt" src="${LOTUS_URL}" alt=""> ${total}/${LEVELS.length * 3}</h2>${cards}
     <p class="small">${isTouch ? '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺'
-      : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br><kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
-    <p class="small">橡皮艇只经得起 3 次碰撞！</p>`, [['出发！', () => start()], ['设置', () => showSettings(showMenu)]]);
+      : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划<br><kbd>空格</kbd> 冲刺　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
+    <p class="small">橡皮艇只经得起 3 次碰撞。</p>`, [['出发', () => start()], ['设置', () => showSettings(showMenu)]]);
   panel.querySelectorAll('.lv[data-lv]').forEach(el => { el.onclick = e => { e.stopPropagation(); pickLevel(+el.dataset.lv); }; });
 }
 function pickLevel(i) {
@@ -1707,17 +1819,17 @@ function showWin() {
   const mark = ok => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✔' : '✘'}</span>`;
   const next = LEVELS.indexOf(LV) + 1, hasNext = next < LEVELS.length;
   const again = ['再玩一次', () => start()], menu = ['选关', toMenu], sh = ['分享成绩', share];
-  show(`<h1>到达终点！</h1><h2>${lvTitle(LV)}</h2>${starsHtml(r.stars)}
+  show(`<h1>到达终点</h1><h2>${lvTitle(LV)}</h2>${starsHtml(r.stars)}
     <p class="score">${fmt(r.score)}<span class="small"> 分</span></p>
     <p class="small">${isNew ? '<span class="new">新纪录！</span>' : old ? `最高 ${fmt(best.score)} 分` : ''}</p>
-    <div class="stats"><div><b>${r.time.toFixed(1)}</b>用时(秒)</div><div><b>${raft.coins}/${total}</b>星星</div><div><b>×${raft.bestCombo}</b>最高连击</div></div>
-    <div class="goals">${mark(true)} 抵达终点<br>${mark(r.gotCoins)} 收集 80% 以上的星星<br>${mark(r.clean)} 全程零碰撞</div>
-    <p class="small">${r.fast ? `⚡ ${PAR_TIME} 秒内完成　` : ''}${hasNext ? (old ? '' : `已解锁${lvTitle(LEVELS[next])}`) : '你已通过全部关卡！'}</p>`,
+    <div class="stats"><div><b>${r.time.toFixed(1)}</b>用时(秒)</div><div><b>${raft.coins}/${total}</b>莲花</div><div><b>×${raft.bestCombo}</b>最高连击</div></div>
+    <div class="goals">${mark(true)} 抵达终点<br>${mark(r.gotCoins)} 采到 80% 以上的莲花<br>${mark(r.clean)} 全程零碰撞</div>
+    <p class="small">${r.fast ? `${PAR_TIME} 秒内完成 · ` : ''}${hasNext ? (old ? '' : `已解锁${lvTitle(LEVELS[next])}`) : '你已通过全部关卡！'}</p>`,
     hasNext ? [[`下一关：${LEVELS[next].name}`, () => start(false, next)], again, menu, sh] : [again, menu, sh]);
 }
 function share() {
   const r = result, url = /^https?:$/.test(location.protocol) ? location.href : '';
-  const text = `我在《橡皮艇漂流》${lvTitle(LV)}拿到 ${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}，${fmt(r.score)} 分，用时 ${r.time.toFixed(1)} 秒！`;
+  const text = `我在《橡皮艇漂流》${lvTitle(LV)}得到 ${r.stars} 朵莲花的评价，${fmt(r.score)} 分，用时 ${r.time.toFixed(1)} 秒！`;
   const say = msg => { const b = [...panel.querySelectorAll('button')].find(x => /分享|复制/.test(x.textContent)); if (b) b.textContent = msg; };
   if (navigator.share) navigator.share(url ? { title: '橡皮艇漂流', text, url } : { title: '橡皮艇漂流', text }).catch(() => {});
   else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url ? text + ' ' + url : text).then(() => say('已复制到剪贴板'), () => say('复制失败'));
@@ -1730,7 +1842,7 @@ function showDead() {
   const tip = drops.some(q => Math.abs(q.d - raft.d) < 150) ? '跌水两侧的白水是回流：对准中间光滑的水舌冲下去，被卷住就冲刺划出去。'
     : nearWhirl ? '离漩涡越近吸力越大：提前往另一侧靠，被吸住就冲刺甩脱。'
     : logs.some(l => l.on && Math.hypot(l.x - raft.x, l.d - raft.d) < 120) ? '漂木跟着水流走：别从后面硬撞，看准空当从旁边超过去。'
-    : '星星标出的就是安全航线。<br>橡皮艇有惯性，看到礁石要提前转向！';
+    : '莲花开着的地方就是安全航线。<br>橡皮艇有惯性，看到礁石要提前转向。';
   show(`<h1>橡皮艇漏气了…</h1><h2>${lvTitle(LV)} · 已漂流 ${pct}%</h2>
     <p>${isTouch ? tip.replace('按 ↓ 或松手', '松手') : tip}</p>`, [['再试一次', () => start()], ['选关', toMenu]]);
 }
