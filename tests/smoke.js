@@ -162,6 +162,7 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
   check('横向时方向键跟着转（↑↓ 转向，→ 前进，← 倒划）', keyMap.ArrowUp === 'L' && keyMap.ArrowDown === 'R' && keyMap.ArrowRight === 'U' && keyMap.ArrowLeft === 'B', JSON.stringify(keyMap));
   await page.context().close();
   page = await newPage({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+  await page.evaluate(() => Promise.all(document.getElementById('panel').getAnimations().map(a => a.finished)));      // 等面板的入场动画放完再量
   check('手机横握：不再提示竖屏，面板不溢出', await page.evaluate(() => getComputedStyle(document.getElementById('rotate')).display === 'none') && await page.evaluate(() => { const p = document.getElementById('panel').getBoundingClientRect(), w = document.getElementById('wrap').getBoundingClientRect(); return p.top >= w.top - 1 && p.bottom <= w.bottom + 1; }));
   await page.context().close();
 
