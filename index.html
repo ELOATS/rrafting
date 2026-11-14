@@ -590,7 +590,7 @@ function reset() {
   cam = { d: raft.d, pd: raft.d }; raft.px = raft.x; raft.pd = raft.d; raft.pa = raft.a;
   body = newBody(); ripples = []; fish = null; fishT = 3; hud = { score: 0, starBump: 0, fx: [], gain: null, L: 0, R: 0, S: 0, U: 0 };
   particles = []; wake = []; floaters = []; confetti = []; flecks = [];
-  for (let i = 0; i < 46; i++) flecks.push(newFleck(raft.d - 260 + Math.random() * 1000));
+  for (let i = 0; i < 64; i++) flecks.push(newFleck(raft.d - 260 + Math.random() * 1000));
   shake = 0; flash = 0; LT = 0; nextCoin = 0; countdown = 0;
 }
 
@@ -1123,10 +1123,11 @@ function drawRock(r) {
   ctx.fillStyle = col(TH.deep, 0.2); shape(0, 0, 1.4); ctx.fill();                                // 水下隐约的石根
   ctx.fillStyle = TH.shadow + '.2)'; shape(SUN[0] * 0.3, SUN[1] * 0.3, 1.04); ctx.fill(); shape(SUN[0] * 0.62, SUN[1] * 0.62, 0.96); ctx.fill();      // 投在水面上的影子，顺着光拉长
   const pul = Math.sin(T * 5 + r.seed) * 1.1;                                                      // 迎水面的浪
-  ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 7;
-  ctx.beginPath(); ctx.ellipse(r.x, y + 2, r.r + 6, r.r + 8 + pul, 0, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.lineWidth = 3 + pul * 0.4; ctx.setLineDash([9 + r.r * 0.4, 2.5, 5, 2]); ctx.lineDashOffset = r.seed * 7;
-  ctx.beginPath(); ctx.ellipse(r.x, y + 1, r.r + 2.5, r.r + 3.5 + pul, 0, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+  for (let j = 0; j < 13; j++) {                    // 水撞在石头上堆起的白沫：一圈大小不一的泡，中间最厚
+    const a = (0.08 + j / 12 * 0.84) * Math.PI, mid = 1 - Math.abs(j - 6) / 7, rr = r.r + 2.5 + hash(r.seed, 300 + j) * 3 + pul * mid;
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + mid * 0.45})`;
+    circle(r.x + Math.cos(a) * rr, y + 1 + Math.sin(a) * (rr + 1.5), (1.6 + mid * 2.6) * (0.75 + hash(r.seed, 320 + j) * 0.5) + Math.sin(T * 6 + j + r.seed) * 0.4); ctx.fill();
+  }
   const g = ctx.createRadialGradient(r.x - LDIR[0] * r.r * 0.55, y - LDIR[1] * r.r * 0.55, r.r * 0.1, r.x, y, r.r * 1.15);      // 朝太阳的一面亮
   g.addColorStop(0, col(P[0])); g.addColorStop(0.5, col(P[1])); g.addColorStop(1, col(P[2]));
   ctx.fillStyle = g; shape(0, 0, 1); ctx.fill();
@@ -1150,7 +1151,6 @@ function drawLog(l) {
   ctx.save(); ctx.translate(l.x, Y(l.d)); ctx.rotate(-l.rot); ctx.globalAlpha = l.fade;
   const x0 = -l.len - 6, x1 = l.len + 6, cr = Math.cos(l.rot), sr = Math.sin(l.rot), ox = (SUN[0] * cr - SUN[1] * sr) * 0.3, oy = (SUN[0] * sr + SUN[1] * cr) * 0.3;
   ctx.fillStyle = TH.shadow + '.3)'; ctx.beginPath(); ctx.roundRect(x0 + ox, -8 + oy, x1 - x0, 16, 8); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.roundRect(x0 - 3, -11 + Math.sin(T * 3 + l.seed) * 0.6, x1 - x0 + 6, 22, 11); ctx.stroke();
   const g = ctx.createLinearGradient(0, -8, 0, 8);
   g.addColorStop(0, '#b8946a'); g.addColorStop(0.35, '#c9a57a'); g.addColorStop(0.7, '#9a7652'); g.addColorStop(1, '#6e5038');
   ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x0, -8, x1 - x0, 16, 7); ctx.fill();
@@ -1290,22 +1290,15 @@ function drawTerrain(d0, d1) {
   }
   fillPattern(PAT.bloom, 0, camD, 1.7, 1.7, 0.4); fillPattern(PAT.shade, 70, camD, 2.1, 2.1, 0.5);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  if (TH.cliff) {               // 岩层：顺着峡谷走向的断续墨线
-    for (let i = Math.floor(d0 / 60) - 3; i <= d1 / 60 + 1; i++) for (const s of [-1, 1]) for (let k = 0; k < 3; k++) {
-      const dd = i * 60 + hash(i, 400 + k) * 60, off = riverW(dd) + 34 + hash(i, 410 + k + s) * 150, len = 40 + hash(i, 420 + k) * 90;
-      ctx.strokeStyle = col([70, 74, 96], 0.1 + hash(i, 430 + k) * 0.2); ctx.lineWidth = 0.8 + hash(i, 440 + k) * 1.6; ctx.beginPath();
-      for (let t = 0; t <= len; t += 10) ctx.lineTo(riverCx(dd + t) + s * (off + Math.sin(t * 0.07 + i) * 4), Y(dd + t));
-      ctx.stroke();
-    }
-  }
   const river = riverPath(d0, d1), mid = new Path2D();
   for (let d = d0; d <= d1; d += 12) mid.lineTo(riverCx(d) + thal(d) * riverW(d) * 0.55, Y(d));
   // 沙岸：由外向里一层层罩上去，边缘是晕开的
-  if (TH.cliff) { ctx.strokeStyle = TH.shadow + '.14)'; ctx.lineWidth = 130; ctx.stroke(river); ctx.strokeStyle = TH.shadow + '.16)'; ctx.lineWidth = 78; ctx.stroke(river); }
-  ctx.strokeStyle = col(TH.sand, 0.32); ctx.lineWidth = 48; ctx.stroke(river);
-  ctx.strokeStyle = col(TH.sand, 0.6); ctx.lineWidth = 36; ctx.stroke(river);
-  ctx.strokeStyle = col(TH.sand, 0.96); ctx.lineWidth = 25; ctx.stroke(river);
-  ctx.strokeStyle = col(TH.wet, 0.5); ctx.lineWidth = 9; ctx.stroke(river);
+  // 每一层都分很多遍薄薄地罩，过渡是连续的，不会出现一圈圈等高线似的色带
+  const glazeStroke = (c, from, to, step, a) => { ctx.strokeStyle = c + a + ')'; for (let lw = from; lw >= to; lw -= step) { ctx.lineWidth = lw; ctx.stroke(river); } };
+  const rgb = c => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},`;
+  if (TH.cliff) glazeStroke(TH.shadow, 150, 60, 6, 0.022);
+  glazeStroke(rgb(TH.sand), 56, 22, 2, 0.11);
+  glazeStroke(rgb(TH.wet), 14, 4, 2, 0.1);
   // 水：浅水透着纸色和沙色，往河心一层层加深
   ctx.save(); ctx.clip(river);
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, CH + 2);
@@ -1323,14 +1316,12 @@ function drawTerrain(d0, d1) {
     const d = i * 70 + hash(i, 210 + k) * 70, x = riverCx(d) + (hash(i, 220 + k) * 1.7 - 0.85) * riverW(d), r = 9 + hash(i, 230 + k) * 16;
     washBlob(ctx, x, Y(d), r, TH.deep, 0.16);
   }
-  ctx.strokeStyle = col(TH.sand, 0.2); ctx.lineWidth = 54; ctx.stroke(river);         // 浅滩透出的沙色
-  ctx.strokeStyle = col(TH.sand, 0.26); ctx.lineWidth = 28; ctx.stroke(river);
+  glazeStroke(rgb(TH.sand), 62, 10, 4, 0.036);                                         // 浅滩透出的沙色，越靠岸越明显
   for (let i = Math.floor(d0 / 22) - 1; i <= d1 / 22 + 1; i++) for (const s of [-1, 1]) for (let k = 0; k < 2; k++) {     // 浅水里的卵石
     const d = i * 22 + hash(i, 250 + k + s) * 22, x = edgeX(d, s) - s * (5 + hash(i, 260 + k + s) * 24), r = 1.6 + hash(i, 270 + k + s) * 3.2;
     ctx.fillStyle = col(TH.rock[1 + (k & 1)], 0.26); oval(x, Y(d), r, r * 0.72, hash(i, 280 + k) * 3); ctx.fill();
   }
-  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 11; ctx.stroke(river);    // 贴岸一圈留白
-  ctx.strokeStyle = col(TH.deep, 0.42); ctx.lineWidth = 2.6; ctx.stroke(river);       // 水线：颜料在边缘沉积
+  glazeStroke('rgba(255,255,255,', 18, 4, 2, 0.045);                                   // 最浅的水边亮一些
   ctx.restore();
   ctx.lineCap = 'round';
   // 岸线细节：石块、漂流木、灌木
@@ -1352,9 +1343,9 @@ function drawTerrain(d0, d1) {
     }
   }
   if (TH.light.cliff) {            // 峡谷：一侧的崖壁把影子投到河面上，明暗分界线随崖顶起伏
-    for (let pass = 0; pass < 3; pass++) {
-      ctx.fillStyle = TH.shadow + '.12)'; ctx.beginPath();
-      for (let d = d0; d <= d1; d += 12) ctx.lineTo(riverCx(d) - riverW(d) + 46 + 40 * Math.sin(d / 210) + 22 * Math.sin(d / 83 + 1) - pass * 13, Y(d));
+    for (let pass = 0; pass < 12; pass++) {         // 分很多层叠出柔和的影子边缘
+      ctx.fillStyle = TH.shadow + '.032)'; ctx.beginPath();
+      for (let d = d0; d <= d1; d += 12) ctx.lineTo(riverCx(d) - riverW(d) + 52 + 40 * Math.sin(d / 210) + 22 * Math.sin(d / 83 + 1) - pass * 4, Y(d));
       ctx.lineTo(-20, Y(d1)); ctx.lineTo(-20, Y(d0)); ctx.closePath(); ctx.fill();
     }
   }
@@ -1516,16 +1507,14 @@ function drawScene() {
     }
     ctx.restore();
   }
-  // 顺流而下的留白笔触
-  fillPattern(PAT.streak, T * 3, camD - T * 72, 1, 1.5, 0.62);
-  if (cfg.quality) fillPattern(PAT.streak, 120 - T * 3, camD - T * 112, 1.7, 2.7, 0.34);
-  // 顺着河道弯曲的水流线
-  ctx.lineCap = 'round'; ctx.lineWidth = 1.3;
+  // 顺着水流漂的一串串细碎泡沫（水流的走向靠它们和落叶、花瓣来表现，水面上不画线）
   for (let i = Math.floor(d0 / 170) - 2; i <= d1 / 170; i++) for (let k = 0; k < 3; k++) {
-    const fr = (hash(i, 400 + k) + T * (0.16 + hash(i, 410 + k) * 0.12)) % 1, s0 = i * 170 + fr * 300, n = hash(i, 420 + k) * 1.7 - 0.85, len = 60 + hash(i, 430 + k) * 100;
-    ctx.strokeStyle = `rgba(255,255,255,${0.42 * Math.sin(fr * Math.PI)})`; ctx.beginPath();
-    for (let d = s0; d <= s0 + len; d += 10) ctx.lineTo(riverCx(d) + n * riverW(d) + Math.sin(d * 0.06 + i) * 1.5, Y(d));
-    ctx.stroke();
+    const fr = (hash(i, 400 + k) + T * (0.16 + hash(i, 410 + k) * 0.12)) % 1, s0 = i * 170 + fr * 300, n = hash(i, 420 + k) * 1.7 - 0.85, len = 50 + hash(i, 430 + k) * 80, al = 0.55 * Math.sin(fr * Math.PI);
+    for (let j = 0, d = s0; d <= s0 + len; d += 9 + hash(i * 7 + j, 440 + k) * 12, j++) {
+      const r = 0.6 + hash(i * 7 + j, 450 + k) * 1.5;
+      ctx.fillStyle = `rgba(255,255,255,${al * (0.5 + hash(i * 7 + j, 460 + k) * 0.5)})`;
+      circle(riverCx(d) + n * riverW(d) + (hash(i * 7 + j, 470 + k) - 0.5) * 7, Y(d), r); ctx.fill();
+    }
   }
   // 粼光：水面上一闪一闪的碎光，偏向太阳那一侧最密
   { const G = TH.light.glitter, sunN = -LDIR[0] * 0.45;
@@ -1584,14 +1573,16 @@ function drawScene() {
     g = ctx.createLinearGradient(0, y, 0, y - 86);                            // 水舌：一笔光滑的深色
     g.addColorStop(0, col(TH.deep, 0.6)); g.addColorStop(1, col(TH.deep, 0));
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.lineTo(q.x, y - 86); ctx.closePath(); ctx.fill();
-    ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.88)'; ctx.lineWidth = 2.6;
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(q.x + s * q.half, y); ctx.quadraticCurveTo(q.x + s * q.half * 0.55, y - 40, q.x + s * 5 + Math.sin(T * 5 + s) * 2, y - 82); ctx.stroke(); }
-    for (let k = 0; k < 3; k++) {                                              // 水舌下方的一串浪
-      const wy = y - 98 - k * 26, ww = 36 - k * 6, wob = Math.sin(T * 6 + k * 2) * 1.5;
-      ctx.strokeStyle = col(TH.deep, 0.3 - k * 0.07); ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 9); ctx.quadraticCurveTo(q.x, wy + 4 + wob, q.x + ww, wy + 9); ctx.stroke();
-      ctx.strokeStyle = `rgba(255,255,255,${0.85 - k * 0.2})`; ctx.lineWidth = 2.8; ctx.setLineDash([14, 3, 7, 3]); ctx.beginPath(); ctx.moveTo(q.x - ww, wy + 3); ctx.quadraticCurveTo(q.x, wy - 3 + wob, q.x + ww, wy + 3); ctx.stroke(); ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    for (let k = 0; k < 3; k++) {                                              // 水舌下方的几道浪：一团团翻起的白沫，越往下游越小
+      const wy = y - 98 - k * 26, ww = 30 - k * 6, wob = Math.sin(T * 6 + k * 2) * 1.5;
+      ctx.fillStyle = col(TH.deep, 0.2 - k * 0.05); oval(q.x, wy + 9, ww, 5); ctx.fill();
+      for (let j = -3; j <= 3; j++) {
+        const fx = q.x + j * ww / 3.4 + Math.sin(T * 4 + j + k) * 1.2, fy = wy + Math.abs(j) * 1.6 + wob;
+        ctx.fillStyle = `rgba(255,255,255,${(0.8 - k * 0.2) * (1 - Math.abs(j) * 0.16)})`; circle(fx, fy, 3.6 - k * 0.5 - Math.abs(j) * 0.35 + Math.sin(T * 7 + j * 2 + k) * 0.5); ctx.fill();
+      }
     }
-    ctx.strokeStyle = col(TH.deep, 0.75); ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(xl, y + 2); ctx.lineTo(xr, y + 2); ctx.stroke();        // 落差的边缘：一道重墨
+    { const lg = ctx.createLinearGradient(0, y - 1, 0, y + 9); lg.addColorStop(0, col(TH.deep, 0.55)); lg.addColorStop(1, col(TH.deep, 0)); ctx.fillStyle = lg; ctx.fillRect(xl, y - 1, xr - xl, 10); }      // 落差的边缘：水从这里翻下去，上沿暗一些
     ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.lineWidth = 2.4;
     for (const [x0, x1] of [[xl, a], [b, xr]]) { ctx.beginPath(); for (let x = x0; x <= x1; x += 9) ctx.lineTo(x, y - 0.5 + Math.sin(x * 0.4 + T * 7) * 1.2); ctx.stroke(); }
   }
@@ -1604,12 +1595,18 @@ function drawScene() {
     for (let d = Math.ceil(a / WAVE_GAP) * WAVE_GAP; d < b; d += WAVE_GAP) {
       const k = Math.min(1, (d - a) / 80, (b - d) / 80); if (k <= 0.05 || d < d0 || d > d1) continue;
       const row = d / WAVE_GAP | 0, cx = riverCx(d) + (hash(row, 4) - 0.5) * 40, w = riverW(d) * (0.5 + hash(row, 5) * 0.34), N = 12;
-      const trace = oy => { ctx.beginPath(); for (let i = 0; i <= N; i++) { const u = i / N * 2 - 1; ctx.lineTo(cx + u * w, Y(d) + (1 - u * u) * -8 + Math.sin(i * 1.7 + row * 2.1) * 4 + Math.sin(T * 6 + i * 0.9 + row) * 1.6 + oy); } };
+      // 一道浪：浪谷是一抹暗色，浪尖是一串大小不一的白沫
+      const py = i => Y(d) + (1 - (i / N * 2 - 1) ** 2) * -8 + Math.sin(i * 1.7 + row * 2.1) * 3 + Math.sin(T * 6 + i * 0.9 + row) * 1.6;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.strokeStyle = col(TH.deep, 0.26 * k); ctx.lineWidth = 8; trace(7); ctx.stroke();            // 浪谷
-      ctx.strokeStyle = `rgba(255,255,255,${0.34 * k})`; ctx.lineWidth = 10; trace(0); ctx.stroke();  // 浪背
-      ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`; ctx.lineWidth = 2.6;
-      ctx.setLineDash([8 + hash(row, 1) * 22, 6 + hash(row, 2) * 10, 16, 9, 5, 7]); ctx.lineDashOffset = hash(row, 3) * 40 + Math.sin(T * 3 + row) * 3; trace(-2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = col(TH.deep, 0.2 * k); ctx.lineWidth = 9; ctx.beginPath();
+      for (let i = 0; i <= N; i++) { const x = cx + (i / N * 2 - 1) * w, yy = py(i) + 7; if (i === 0) ctx.moveTo(x, yy); else { const xp = cx + ((i - 0.5) / N * 2 - 1) * w; ctx.quadraticCurveTo(xp, (py(i - 1) + py(i)) / 2 + 7, x, yy); } }
+      ctx.stroke();
+      for (let i = 0; i <= N * 3; i++) {
+        const f = i / 3, u = f / N * 2 - 1, edge = 1 - Math.abs(u) ** 3, sz = (1.4 + hash(row * 40 + i, 6) * 3.4) * edge + Math.sin(T * 5 + i + row) * 0.4;
+        if (sz < 0.7) continue;
+        ctx.fillStyle = `rgba(255,255,255,${k * (0.45 + hash(row * 40 + i, 7) * 0.5)})`;
+        circle(cx + u * w + (hash(row * 40 + i, 8) - 0.5) * 5, lerp(py(Math.floor(f)), py(Math.min(N, Math.floor(f) + 1)), f % 1) + (hash(row * 40 + i, 9) - 0.5) * 6, sz); ctx.fill();
+      }
     }
   }
   // 漩涡：一团深色的晕染，几笔旋转的线
@@ -1641,9 +1638,6 @@ function drawScene() {
       ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - fr) * (1 - fr)})`; circle(fx, fy, 1.3 + hash(r.seed, 80 + k) * 2.4); ctx.fill();
     }
   }
-  // 岸边断续的水沫
-  ctx.setLineDash([7, 13, 3, 21, 11, 17]); ctx.lineDashOffset = T * 26; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 3; ctx.stroke(river); ctx.setLineDash([]);
   ctx.restore();
 
   // ---- 水边与水上的东西 ----
@@ -1666,7 +1660,6 @@ function drawScene() {
   for (const c of coins) {
     if (c.got || c.d < d0 || c.d > d1) continue;
     const ph = T * 2.4 + c.d, y = Y(c.d) + Math.sin(ph) * 1.5;
-    ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.2 * Math.sin(ph)})`; ctx.lineWidth = 1.1; oval(c.x, y + 1, 18.5 + Math.sin(ph) * 1.5, 17 + Math.sin(ph) * 1.5); ctx.stroke();
     ctx.fillStyle = TH.shadow + '.22)'; oval(c.x + SUN[0] * 0.25, y + SUN[1] * 0.25 + 1, 14.5, 13); ctx.fill();
     ctx.save(); ctx.translate(c.x, y); ctx.rotate(Math.sin(T * 0.9 + c.d * 0.7) * 0.3 + c.d); ctx.drawImage(LOTUS, -20, -20, 40, 40); ctx.restore();
   }
@@ -1675,7 +1668,6 @@ function drawScene() {
     if (g.got || g.d < d0 || g.d > d1) continue;
     const y = Y(g.d) + Math.sin(T * 2.5 + g.d) * 2;
     ctx.fillStyle = TH.shadow + '.26)'; ctx.beginPath(); ctx.arc(g.x + SUN[0] * 0.35, y + SUN[1] * 0.35, 14.5, 0, TAU); ctx.arc(g.x + SUN[0] * 0.35, y + SUN[1] * 0.35, 7.4, 0, TAU, true); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.2; circle(g.x, y, 19 + Math.sin(T * 3) * 1.5); ctx.stroke();
     ctx.save(); ctx.translate(g.x, y); ctx.rotate(T * 0.5); ctx.drawImage(RING, -22, -22, 44, 44); ctx.restore();
   }
   for (const r of rocks) if (r.d > d0 - 40 && r.d < d1 + 40) drawRock(r);
