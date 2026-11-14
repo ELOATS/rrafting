@@ -1,6 +1,6 @@
 {
   "name": "rrafting",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": true,
   "description": "橡皮艇漂流：一个浏览器里的俯视角漂流游戏",
   "scripts": {

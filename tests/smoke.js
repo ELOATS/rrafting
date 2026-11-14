@@ -60,9 +60,9 @@ const helpers = () => {
       if (!r.gate && gap > 2 && gap < 24) bad.push(`礁石 d=${r.d | 0} 与河岸之间有 ${gap | 0}px 的窄缝`);
     }
     for (const c of L.coins) {
-      for (const r of L.rocks) if (Math.hypot(r.x - c.x, r.d - c.d) < r.r + 24) bad.push(`星星 d=${c.d} 离礁石太近`);
-      for (const v of L.whirls) if (Math.hypot(v.x - c.x, v.d - c.d) < 60) bad.push(`星星 d=${c.d} 在漩涡中心附近`);
-      if (Math.abs(c.x - g.riverCx(c.d)) > g.riverW(c.d) - 24) bad.push(`星星 d=${c.d} 太靠岸`);
+      for (const r of L.rocks) if (Math.hypot(r.x - c.x, r.d - c.d) < r.r + 24) bad.push(`莲花 d=${c.d} 离礁石太近`);
+      for (const v of L.whirls) if (Math.hypot(v.x - c.x, v.d - c.d) < 60) bad.push(`莲花 d=${c.d} 在漩涡中心附近`);
+      if (Math.abs(c.x - g.riverCx(c.d)) > g.riverW(c.d) - 24) bad.push(`莲花 d=${c.d} 太靠岸`);
     }
     for (const q of L.drops) if (Math.abs(q.x - g.safeX(q.d)) > 1) bad.push(`跌水 d=${q.d} 的水舌不在安全航线上`);
     return bad;
@@ -101,10 +101,10 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
       if (r.state === 'win') { wins++; best = Math.max(best, r.score); if (r.hits === 0) clean++; }
     }
     check('机器人能稳定通关', wins >= 10, `${wins}/12 通关`);
-    check('零碰撞三星可达成', clean >= 1, `${clean}/12 零碰撞，最高 ${best} 分`);
-    // 教学关允许随波逐流勉强漂到终点，但只能拿 1 星；之后的关卡不操作必沉
+    check('零碰撞满评价可达成', clean >= 1, `${clean}/12 零碰撞，最高 ${best} 分`);
+    // 教学关允许随波逐流勉强漂到终点，但只能拿 1 朵莲花；之后的关卡不操作必沉
     const idle = await page.evaluate(l => window.play(l, 'idle'), lvl);
-    if (lvl === 0) check('不操作最多 1 星', idle.stars <= 1, idle.state === 'win' ? `${idle.time} 秒漂到终点，${idle.stars} 星` : `漂到 ${idle.d} 处沉没`);
+    if (lvl === 0) check('不操作最多 1 朵', idle.stars <= 1, idle.state === 'win' ? `${idle.time} 秒漂到终点，${idle.stars} 朵` : `漂到 ${idle.d} 处沉没`);
     else check('不操作无法通关', idle.state === 'dead', `漂到 ${idle.d} 处${idle.state === 'dead' ? '沉没' : '：' + idle.state}`);
     const a = await page.evaluate(l => window.play(l, 'bot'), lvl), b = await page.evaluate(l => window.play(l, 'bot'), lvl);
     check('同样的操作得到同样的结果', a.time === b.time && a.score === b.score && a.hits === b.hits, `${a.time}s/${a.score} 对 ${b.time}s/${b.score}`);
@@ -152,7 +152,7 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
   console.log('离线');
   page = await newPage();
   const sw = await page.evaluate(() => navigator.serviceWorker.ready.then(() => true).catch(() => false));
-  await page.waitForFunction(() => caches.open('rafting-v1').then(c => c.keys()).then(k => k.length >= 3), null, { timeout: 8000 }).catch(() => {});
+  await page.waitForFunction(() => caches.open('rafting-v2').then(c => c.keys()).then(k => k.length >= 3), null, { timeout: 8000 }).catch(() => {});
   await page.context().setOffline(true);
   let offlineOk = false;
   try { await page.reload(); await page.waitForFunction(() => window.__raft, null, { timeout: 8000 }); offlineOk = true; } catch (e) {}

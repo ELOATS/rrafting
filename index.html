@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#ece4d1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f4eddd'/%3E%3Cpath d='M9 0q8 16-2 32h18q-8-16 2-32z' fill='%237dbfc0'/%3E%3Crect x='11.5' y='8' width='9' height='17' rx='4.5' fill='%23e46f51' stroke='%233b352d' stroke-width='1'/%3E%3Crect x='14' y='11.5' width='4' height='10' rx='2' fill='%235f6f76'/%3E%3C/svg%3E">
 <title>橡皮艇漂流</title>
-<meta name="description" content="划着橡皮艇顺流而下：躲礁石、绕漂木、冲急流、闯漩涡和跌水。浏览器里直接玩，支持键盘和触屏。">
+<meta name="description" content="一幅会动的水彩画：划着橡皮艇顺流而下，采莲花，躲礁石，冲急流。浏览器里直接玩，支持键盘和触屏。">
 <meta property="og:title" content="橡皮艇漂流">
-<meta property="og:description" content="划着橡皮艇顺流而下：躲礁石、绕漂木、冲急流、闯漩涡和跌水。">
+<meta property="og:description" content="一幅会动的水彩画：划着橡皮艇顺流而下，采莲花，躲礁石，冲急流。">
 <meta property="og:type" content="website">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -63,12 +63,12 @@
                border: 1px solid rgba(59,53,45,.4); border-bottom-width: 2px; font: 600 12px/1.6 var(--serif); }
   #panel .small { font-size: 12px; color: var(--ink2); }
   #panel .new { color: var(--verm); font-weight: 700; }
-  button { margin-top: 14px; padding: 11px 34px; font: 600 19px/1 var(--kai); letter-spacing: 4px; text-indent: 4px; color: #fbf7ea; cursor: pointer;
+  button { margin-top: 14px; padding: 11px 22px; font: 600 19px/1 var(--kai); letter-spacing: 3px; text-indent: 3px; white-space: nowrap; color: #fbf7ea; cursor: pointer;
            background: linear-gradient(#7f9e68, #62824e); border: 1px solid #4f6b3f; border-radius: 7px;
            box-shadow: 0 2px 0 #4a6439, 0 7px 16px rgba(70,90,50,.26); }
   button:active { transform: translateY(2px); box-shadow: 0 0 0 #4a6439, 0 3px 8px rgba(70,90,50,.26); }
   .btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 9px; }
-  .btns #go { flex-basis: 100%; margin-left: 12%; margin-right: 12%; }
+  .btns #go { flex-basis: 100%; margin-left: 10%; margin-right: 10%; }
   button.alt { margin-top: 12px; padding: 8px 15px; font: 500 14px/1 var(--serif); letter-spacing: 1px; text-indent: 1px; color: var(--ink);
                background: rgba(255,253,246,.75); border: 1px solid rgba(59,53,45,.36); box-shadow: 0 1px 0 rgba(59,53,45,.22); }
   button.alt:active { box-shadow: none; }
@@ -252,10 +252,11 @@ const TEX = (() => {
 const PAT = {};
 for (const k in TEX) PAT[k] = ctx.createPattern(TEX[k], 'repeat');
 
-// 预先画好的小画片（两倍分辨率，放大也清楚）
+// 预先画好的小画片：高分屏上用两倍分辨率，普通屏幕一倍就够，省得白白缩小
+const SPR = (window.devicePixelRatio || 1) > 1.3 ? 2 : 1;
 function sprite(size, paint) {
-  const c = document.createElement('canvas'); c.width = c.height = size * 2;
-  const g = c.getContext('2d'); g.scale(2, 2); g.translate(size / 2, size / 2); g.lineCap = g.lineJoin = 'round'; paint(g);
+  const c = document.createElement('canvas'); c.width = c.height = size * SPR;
+  const g = c.getContext('2d'); g.scale(SPR, SPR); g.translate(size / 2, size / 2); g.lineCap = g.lineJoin = 'round'; paint(g);
   return c;
 }
 // 树：从正上方看到的树冠，用几层透明的色块叠出来
@@ -596,11 +597,12 @@ function music() {
   if (nextStep < ac.currentTime) nextStep = ac.currentTime + 0.06;
   while (nextStep < ac.currentTime + 0.3) {
     const i = stepIdx++, beat = i & 7, [root, minor] = LV.music[(i >> 3) % LV.music.length], ch = [0, minor ? 3 : 4, 7, 12];
+    const scale = minor ? [0, 3, 5, 7, 10] : [0, 2, 4, 7, 9];                                   // 旋律只用五声音阶
     const lively = state === 'play' && (boostAt(raft.d) > 0 || raft.sprint);
-    if (beat === 0) { tone(root - 12, nextStep, 2.3, 'sine', 0.075); tone(root + ch[1], nextStep, 2.3, 'sine', 0.016); tone(root + 7, nextStep, 2.3, 'sine', 0.016); }
-    if (hash(i, 7) < (lively ? 0.95 : 0.66)) tone(root + 12 + ch[[0, 2, 1, 2, 3, 2, 1, 2][beat]], nextStep, 0.5, 'triangle', 0.028);
-    if (!(beat & 1) && hash(i, 9) < (lively ? 0.5 : 0.25)) tone(root + 24 + ch[hash(i, 11) * 3 | 0], nextStep, 0.9, 'sine', 0.018);
-    nextStep += 0.3;
+    if (beat === 0) { tone(root - 12, nextStep, 2.6, 'sine', 0.07); tone(root + ch[1], nextStep, 2.6, 'sine', 0.014); tone(root + 7, nextStep, 2.6, 'sine', 0.014); }
+    if (hash(i, 7) < (lively ? 0.9 : 0.58)) { const m = root + 12 + ch[[0, 2, 1, 2, 3, 2, 1, 2][beat]]; tone(m, nextStep, 0.8, 'sine', 0.034); tone(m + 12, nextStep, 0.3, 'sine', 0.009); }
+    if (!(beat & 1) && hash(i, 9) < (lively ? 0.5 : 0.28)) tone(root + 24 + scale[hash(i, 11) * 5 | 0], nextStep, 1.2, 'sine', 0.02);
+    nextStep += 0.34;
   }
 }
 function setMuted(v) { muted = v; store.set('raft_muted', v); if (master) master.gain.value = v ? 0 : cfg.vol; }
@@ -620,23 +622,26 @@ function swish(vol = 0.05, freq = 1300, dur = 0.2, q = 0.8) {
   g.gain.setValueAtTime(0.001, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
   link(s, f, g, master); s.start(t0, Math.random() * 2, dur + 0.05);
 }
+// 采莲、补气这类提示音：像轻轻拨一下木琴，按五声音阶往上走
+const chime = (f, vol = 0.08, delay = 0, dur = 0.5) => { beep(f, dur, 'sine', vol, 0, delay); beep(f * 2.01, dur * 0.5, 'sine', vol * 0.32, 0, delay); beep(f * 3.02, dur * 0.25, 'sine', vol * 0.12, 0, delay); };
+const PENTA = [0, 2, 4, 7, 9], note = (base, n) => base * Math.pow(2, n / 12);
 const sfx = {
-  coin: c => { const f = 780 * Math.pow(1.04, Math.min(c, 14)); beep(f, 0.08, 'triangle', 0.09); beep(f * 1.5, 0.12, 'triangle', 0.09, 0, 0.06); },
+  coin: c => { const k = Math.min(c - 1, 14); chime(note(523.25, PENTA[k % 5] + 12 * (k / 5 | 0)), 0.085); },
   stroke: () => { swish(0.07, 1100, 0.26); beep(190, 0.07, 'sine', 0.05, -90); },
   wave: () => { swish(0.1, 1800, 0.3, 0.5); },
   drop: () => { swish(0.22, 900, 0.7, 0.4); beep(74, 0.28, 'sine', 0.22, -34); },
-  combo: () => { [784, 988, 1175].forEach((f, i) => beep(f, 0.16, 'triangle', 0.07, 0, i * 0.05)); },
-  hit: () => { beep(95, 0.3, 'sine', 0.3, -50); beep(240, 0.12, 'triangle', 0.08, -120); swish(0.22, 700, 0.5, 0.4); },
+  combo: () => { [0, 4, 7, 12].forEach((n, i) => chime(note(659.25, n), 0.055, i * 0.06, 0.6)); },
+  hit: () => { beep(95, 0.3, 'sine', 0.3, -50); beep(240, 0.12, 'triangle', 0.07, -120); swish(0.22, 700, 0.5, 0.4); },
   bank: () => { swish(0.08, 420, 0.22, 1.2); },
-  ring: () => { [523, 784, 1047].forEach((f, i) => beep(f, 0.14, 'sine', 0.1, 0, i * 0.07)); },
+  ring: () => { [0, 7, 12].forEach((n, i) => chime(note(440, n), 0.08, i * 0.08, 0.7)); },
   near: () => { swish(0.07, 2400, 0.18); },
-  duck: () => { beep(620, 0.07, 'square', 0.03, -200); beep(560, 0.09, 'square', 0.03, -200, 0.11); swish(0.06, 2000, 0.3); },
+  duck: () => { beep(520, 0.08, 'triangle', 0.04, -160); beep(470, 0.1, 'triangle', 0.04, -150, 0.12); swish(0.06, 2000, 0.3); },
   bird: () => { const f = 2600 + Math.random() * 1600, n = 2 + (Math.random() * 4 | 0);
     for (let i = 0; i < n; i++) beep(f * (1 + (i % 2) * 0.12), 0.07, 'sine', 0.018, 500, i * 0.1); },
-  tick: () => { beep(520, 0.1, 'triangle', 0.1); },
-  go: () => { beep(1040, 0.3, 'triangle', 0.12); },
-  win: () => { [523, 659, 784, 1047].forEach((f, i) => beep(f, 0.22, 'triangle', 0.12, 0, i * 0.13)); },
-  dead: () => { swish(0.2, 3000, 1.2, 2); [392, 330, 262, 196].forEach((f, i) => beep(f, 0.25, 'triangle', 0.07, 0, i * 0.16)); },
+  tick: () => { beep(700, 0.07, 'sine', 0.11, -260); swish(0.05, 2600, 0.05, 3); },          // 木鱼似的一声
+  go: () => { chime(880, 0.1, 0, 0.8); },
+  win: () => { [0, 2, 4, 7, 9, 12].forEach((n, i) => chime(note(523.25, n), 0.085, i * 0.11, 0.9)); },
+  dead: () => { swish(0.2, 3000, 1.2, 2); [9, 7, 4, 0].forEach((n, i) => chime(note(261.63, n), 0.07, i * 0.17, 0.8)); },
 };
 
 // ---------- 逻辑 ----------
@@ -759,6 +764,10 @@ function update(dt) {
   raft.px = raft.x; raft.pd = raft.d; raft.pa = raft.a; cam.pd = cam.d;          // 记下上一步的位置，渲染时在两步之间插值
   for (const l of logs) { l.px = l.x; l.pd = l.d; l.prot = l.rot; }
   ambientStep(dt, state !== 'pause');
+  for (let i = hud.fx.length - 1; i >= 0; i--) {              // 界面上的小动画：飘向计数处的莲花、瘪掉的气囊
+    const f = hud.fx[i]; f.t += dt * (f.kind === 'heart' ? 1.7 : 2.6);
+    if (f.t >= 1) { hud.fx.splice(i, 1); if (f.kind !== 'heart') hud.starBump = 1; }
+  }
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i]; p.life -= dt; p.x += p.vx * dt; p.d += p.vd * dt; p.vx *= 0.96; p.vd *= 0.96;
     if (p.vz) { p.z += p.vz * dt; p.vz -= 420 * dt; if (p.z < 0) { p.z = 0; p.vz = 0; p.vx *= 0.3; p.vd *= 0.3; if (p.r > 2.6) ripple(p.x, p.d, 8, 0.5, 0.35); } }      // 水珠被抛起再落回水面
@@ -933,7 +942,7 @@ function update(dt) {
       const cdist = Math.hypot(c.x - raft.x, c.d - raft.d);
       if (cdist < 54 && cdist >= 26) { const k = Math.min(1, 7 * dt); c.x += (raft.x - c.x) * k; c.d += (raft.d - c.d) * k; }      // 靠近时莲花会漂过来
       else if (cdist < 26) {
-        c.got = true; if (hud.fx.length < 8) hud.fx.push({ kind: 'star', wx: c.x, wd: c.d, t: 0 }); ripple(c.x, c.d, 26, 0.6, 0.5, 6);
+        c.got = true; hud.fx.push({ kind: 'star', sx: c.x, sy: H * 0.74 - (c.d - cam.d), t: 0 }); ripple(c.x, c.d, 26, 0.6, 0.5, 6);
         raft.coins++; raft.combo++; raft.bestCombo = Math.max(raft.bestCombo, raft.combo);
         const pts = 100 + 10 * Math.min(raft.combo - 1, 20); raft.score += pts;
         sfx.coin(raft.combo); splash(c.x, c.d, 7, '#f6b9c6', 80);
@@ -1676,11 +1685,8 @@ function drawHUD() {
   for (let i = hud.fx.length - 1; i >= 0; i--) {
     const f = hud.fx[i];
     if (f.kind === 'heart') {          // 失去的那格气囊：瘪下去、飘落
-      f.t += fdt * 1.7; if (f.t >= 1) { hud.fx.splice(i, 1); continue; }
       airCell(25 + f.i * 25 + f.t * 8, 27 + f.t * f.t * 46, 9 * (1 - f.t * 0.5), true, 1 - f.t);
     } else {                             // 采到的莲花：飘向计数处
-      if (f.sx === undefined) { f.sx = f.wx; f.sy = Y(f.wd); }
-      f.t += fdt * 2.6; if (f.t >= 1) { hud.fx.splice(i, 1); hud.starBump = 1; continue; }
       const e = f.t * f.t * (3 - 2 * f.t), fx = lerp(f.sx, W / 2 - 36, e) + Math.sin(e * Math.PI) * 26, fy = lerp(f.sy, 27, e), s = 44 * (1 - e * 0.42);
       ctx.save(); ctx.translate(fx, fy); ctx.rotate(e * 3); ctx.drawImage(LOTUS, -s / 2, -s / 2, s, s); ctx.restore();
     }
@@ -1815,7 +1821,7 @@ function showWin() {
   const r = result, total = coins.length;
   const old = r.old, best = r.best;
   const isNew = old && (r.score > (old.score || 0));
-  for (let i = 0; i < r.stars; i++) beep(660 + i * 220, 0.18, 'triangle', 0.1, 0, 0.25 + i * 0.32);
+  for (let i = 0; i < r.stars; i++) chime(note(659.25, [0, 4, 7][i]), 0.09, 0.25 + i * 0.32, 0.7);
   const mark = ok => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✔' : '✘'}</span>`;
   const next = LEVELS.indexOf(LV) + 1, hasNext = next < LEVELS.length;
   const again = ['再玩一次', () => start()], menu = ['选关', toMenu], sh = ['分享成绩', share];

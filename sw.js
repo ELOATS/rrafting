@@ -1,5 +1,5 @@
 // 离线缓存：有网时总是取最新版本并更新缓存，断网时回退到上次缓存的版本。
-const CACHE = 'rafting-v1';
+const CACHE = 'rafting-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });

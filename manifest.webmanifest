@@ -1,14 +1,14 @@
 {
   "name": "橡皮艇漂流",
   "short_name": "漂流",
-  "description": "划着橡皮艇顺流而下：躲礁石、绕漂木、冲急流、闯漩涡和跌水。",
+  "description": "一幅会动的水彩画：划着橡皮艇顺流而下，采莲花，躲礁石，冲急流。",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "portrait",
-  "background_color": "#14261a",
-  "theme_color": "#14261a",
+  "background_color": "#ece4d1",
+  "theme_color": "#ece4d1",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
