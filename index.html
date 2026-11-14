@@ -27,6 +27,7 @@
   #loading, #rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
                       padding: 24px; text-align: center; color: var(--ink2); font: 18px/1.7 var(--kai); letter-spacing: 2px; }
   #rotate { display: none; z-index: 10; background: #ece4d1; color: var(--ink); }
+  body.no-rotate #rotate { display: none !important; }
   @media (orientation: landscape) and (max-height: 480px) and (pointer: coarse) { #rotate { display: flex; } }
   body { display: flex; align-items: center; justify-content: center; font-family: var(--serif); color: var(--ink);
          -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
@@ -69,6 +70,12 @@
   button:active { transform: translateY(2px); box-shadow: 0 0 0 #4a6439, 0 3px 8px rgba(70,90,50,.26); }
   .btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 9px; }
   .btns #go { flex-basis: 100%; margin-left: 10%; margin-right: 10%; }
+  /* 横屏：面板放宽，关卡并排，按钮排成一行 */
+  .land #panel { width: 90%; max-width: 640px; padding-top: 18px; }
+  .land .lvs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .land .lvs .lv { margin: 0; }
+  .land .btns #go { flex-basis: auto; margin-left: 0; margin-right: 0; }
+  .land .btns button { margin-top: 12px; }
   button.alt { margin-top: 12px; padding: 8px 15px; font: 500 14px/1 var(--serif); letter-spacing: 1px; text-indent: 1px; color: var(--ink);
                background: rgba(255,253,246,.75); border: 1px solid rgba(59,53,45,.36); box-shadow: 0 1px 0 rgba(59,53,45,.22); }
   button.alt:active { box-shadow: none; }
@@ -111,7 +118,11 @@ if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prot
 
 // ---------- 基础 ----------
 const W = 480;                 // 逻辑宽度
-let H = 800;                   // 逻辑高度（随屏幕比例变化）
+let H = 800;                   // 逻辑上顺流方向的长度（随屏幕比例变化）
+// 横屏：整个世界顺时针转 90°，河从左往右流。世界坐标仍然是 W 宽、H 长，只是画到屏幕上时转了个方向。
+let LAND = false, PR = 1, SW = W, SH = H, ROT = false;      // SW/SH 是屏幕上的逻辑宽高；ROT 表示当前是否在旋转过的坐标系里画
+function baseTransform() { if (LAND) ctx.setTransform(0, PR, -PR, 0, H * PR, 0); else ctx.setTransform(PR, 0, 0, PR, 0, 0); }
+const toScreen = (x, y) => LAND ? [H - y, x] : [x, y];
 const canvas = document.getElementById('c');
 let ctx = canvas.getContext('2d');
 const wrap = document.getElementById('wrap');
@@ -124,7 +135,7 @@ const TAU = Math.PI * 2;
 
 const chunks = new Map();     // 预渲染的地形分块
 // 设置：音量、转向灵敏度、画质、震动
-const cfg = { vol: 1, sens: 1, quality: 1, qLock: false, music: true, shake: !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) };
+const cfg = { vol: 1, sens: 1, quality: 1, qLock: false, music: true, orient: 'auto', shake: !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('raft_settings')) || {}); } catch (e) {}
 const saveCfg = () => { try { localStorage.setItem('raft_settings', JSON.stringify(cfg)); } catch (e) {} };
 const SENS = [{ rate: 0.72, a: 0.5 }, { rate: 1, a: 0.6 }, { rate: 1.35, a: 0.72 }];
@@ -132,15 +143,19 @@ function resize() {
   const cs = getComputedStyle(document.body), pad = k => parseFloat(cs['padding' + k]) || 0;       // 避开刘海和底部横条
   const mat = window.innerWidth >= 700 ? 24 : 0;                // 宽屏上给画四周的白边留出位置
   const ww = Math.max(120, window.innerWidth - pad('Left') - pad('Right') - mat), wh = Math.max(160, window.innerHeight - pad('Top') - pad('Bottom') - mat);
-  H = Math.max(640, Math.min(1100, Math.round(W * wh / ww)));
-  const scale = Math.min(ww / W, wh / H);
+  LAND = cfg.orient === 'land' || (cfg.orient === 'auto' && ww > wh * 1.15);          // 自动：屏幕明显偏宽就横着玩
+  const along = LAND ? ww : wh, across = LAND ? wh : ww;
+  H = Math.max(640, Math.min(1100, Math.round(W * along / across)));
+  const scale = Math.min(across / W, along / H);
+  SW = LAND ? H : W; SH = LAND ? W : H;
   // 渲染分辨率封顶：精细最多 2 倍逻辑分辨率，流畅不超过 1 倍，避免高分屏上白白多画像素
-  const pr = cfg.quality ? Math.min(scale * (window.devicePixelRatio || 1), 2) : Math.min(scale, 1);
-  wrap.style.width = canvas.style.width = W * scale + 'px';
-  wrap.style.height = canvas.style.height = H * scale + 'px';
-  canvas.width = Math.round(W * pr);
-  canvas.height = Math.round(H * pr);
-  ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  PR = cfg.quality ? Math.min(scale * (window.devicePixelRatio || 1), 2) : Math.min(scale, 1);
+  wrap.style.width = canvas.style.width = SW * scale + 'px';
+  wrap.style.height = canvas.style.height = SH * scale + 'px';
+  canvas.width = Math.round(SW * PR);
+  canvas.height = Math.round(SH * PR);
+  baseTransform();
+  wrap.classList.toggle('land', LAND); document.body.classList.toggle('no-rotate', cfg.orient !== 'port');
   chunks.clear();
 }
 window.addEventListener('resize', resize);
@@ -342,6 +357,9 @@ const RING = sprite(44, g => {
 const RAFT_R = 14, WAVE_GAP = 46, NUM = '一二三四五';
 const C = 48, D = 50, E = 52, F = 41, G = 43, A = 45, Bb = 46;      // 配乐用的和弦根音（MIDI）
 const tSteer = isTouch ? '按住屏幕左侧 / 右侧  划桨转向' : '←  →  划桨转向';
+// 横屏时操作变了，提示也要跟着换
+const LAND_SIGN = { '←  →  划桨转向': '↑  ↓  划桨转向', '按 ↑ 划桨前进': '按 → 划桨前进', '按住屏幕左侧 / 右侧  划桨转向': '左手上下两键  划桨转向',
+  '两侧同时按住  划桨前进': '右下角的箭头  划桨前进', '按住中间按钮  冲刺': '右下角的双箭头  冲刺' };
 const tSprint = isTouch ? '按住中间按钮  冲刺' : '按住空格  冲刺（消耗体力）';
 const LEVELS = [
   { id: 1, name: '青溪谷', theme: 'forest', seed: 20261112, end: 9000, flow: 85, par: 60, w0: 118,
@@ -512,7 +530,7 @@ let state = 'menu';            // menu | ready | play | pause | win | dead
 let T = 0, LT = 0;             // 动画时钟 / 关卡时钟
 let raft, cam, particles, wake, floaters, confetti, shake, flash, countdown, nextCoin;
 let muted = store.get('raft_muted', false);
-let hud = { score: 0, starBump: 0, fx: [], gain: null, L: 0, R: 0, S: 0 };      // 界面上的动效状态
+let hud = { score: 0, starBump: 0, fx: [], gain: null, L: 0, R: 0, S: 0, U: 0 };      // 界面上的动效状态
 const shakeDir = [0.7, 0.7];
 const buzz = ms => { if (cfg.shake && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } };      // 手机震动
 const input = { L: false, R: false, U: false, B: false, S: false };
@@ -553,7 +571,7 @@ function reset() {
            phL: 0, phR: 0, dirL: 1, dirR: 1, hits: 0, sink: 0, squash: 0, near: 0, bump: 0, rel: 0, st: 0, stam: 1, tired: false, sprint: false, spin: 0, hole: 0, touch: 0, stuck: 0 };
   prng = mulberry32(LV.seed ^ 0x51ed27);
   cam = { d: raft.d, pd: raft.d }; raft.px = raft.x; raft.pd = raft.d; raft.pa = raft.a;
-  body = newBody(); ripples = []; fish = null; fishT = 3; hud = { score: 0, starBump: 0, fx: [], gain: null, L: 0, R: 0, S: 0 };
+  body = newBody(); ripples = []; fish = null; fishT = 3; hud = { score: 0, starBump: 0, fx: [], gain: null, L: 0, R: 0, S: 0, U: 0 };
   particles = []; wake = []; floaters = []; confetti = []; flecks = [];
   for (let i = 0; i < 46; i++) flecks.push(newFleck(raft.d - 260 + Math.random() * 1000));
   shake = 0; flash = 0; LT = 0; nextCoin = 0; countdown = 0;
@@ -777,7 +795,7 @@ function update(dt) {
   for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.life -= dt * 1.1; f.d += 34 * dt; if (f.life <= 0) floaters.splice(i, 1); }
   for (let i = confetti.length - 1; i >= 0; i--) {
     const c = confetti[i]; c.y += c.vy * dt; c.x += (c.vx + Math.sin(T * 3 + c.ph) * 30) * dt; c.rot += c.vr * dt;
-    if (c.y > H + 20) confetti.splice(i, 1);
+    if (c.y > SH + 20) confetti.splice(i, 1);
   }
   if (state !== 'pause' && ++fleckTick % 3 === 0) for (let i = 0; i < flecks.length; i++) {
     const f = flecks[i]; flowAt(f.x, f.d);
@@ -984,7 +1002,7 @@ function win() {
   result.best = { stars: Math.max(result.stars, old ? old.stars : 0), score: Math.max(result.score, old ? old.score || 0 : 0), time: Math.min(result.time, old ? old.time : 1e9) };
   store.set(bestKey(LV), result.best);
   const COL = ['#f6c1cd', '#fbe3e8', '#f09bb0', '#ffffff', '#f4d58d', '#f6c1cd'];      // 通关时落下的是花瓣
-  for (let i = 0; i < 110; i++) confetti.push({ x: Math.random() * W, y: -20 - Math.random() * 320, vy: 110 + Math.random() * 150,
+  for (let i = 0; i < 110; i++) confetti.push({ x: Math.random() * SW, y: -20 - Math.random() * 320, vy: 110 + Math.random() * 150,
     vx: (Math.random() - 0.5) * 50, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 12, ph: Math.random() * TAU, c: COL[i % COL.length], s: 5 + Math.random() * 5 });
   setTimeout(showWin, 1100);
 }
@@ -1005,17 +1023,21 @@ function fillPattern(pat, ox, oy, sx = 1, sy = sx, alpha = 1, op = 'source-over'
 }
 // 墨字：深色的字配一圈纸色的晕边，压在任何底色上都读得清
 function inkText(text, x, y, size, color = INK, align = 'center', font = FONT, weight = 600) {
+  if (ROT) { ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI / 2); x = y = 0; }       // 世界转了，字要转回来
   ctx.font = `${weight} ${size}px ${font}`; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(3, size * 0.32); ctx.strokeStyle = paperA(0.85); ctx.strokeText(text, x, y);
   ctx.fillStyle = color; ctx.fillText(text, x, y);
+  if (ROT) ctx.restore();
 }
 // 纸签：一小条纸，上面写字
 function paperTag(text, x, y, size) {
+  if (ROT) { ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI / 2); x = y = 0; }
   ctx.font = `600 ${size}px ${KAI}`; const w = ctx.measureText(text).width + size * 1.5, h = size * 1.95;
   ctx.fillStyle = 'rgba(70,60,40,.16)'; ctx.beginPath(); ctx.roundRect(x - w / 2 + 2, y - h / 2 + 3, w, h, 4); ctx.fill();
   ctx.fillStyle = paperA(0.92); ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, 4); ctx.fill();
   ctx.strokeStyle = ink(0.26); ctx.lineWidth = 1; ctx.stroke();
   ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 1);
+  if (ROT) ctx.restore();
 }
 // 一块石头：受光面浅、背光面深，墨线勾边
 function stone(x, y, rx, ry, rot, pal, line = 0.5) {
@@ -1350,7 +1372,7 @@ function riverPath(d0, d1) {
 function getChunk(ci) {
   let c = chunks.get(ci);
   if (c) return c;
-  const pr = canvas.width / W, main = ctx, sb = baseY, sc = camD, layers = [];
+  const pr = PR, main = ctx, sb = baseY, sc = camD, layers = [];
   baseY = 0; camD = (ci + 1) * CH;
   for (let k = 0; k < 2; k++) {
     if (k === 1 && cfg.quality) { layers.push(null); break; }       // 精细画质下树冠逐棵绘制（会随风摆动），不需要缓存层
@@ -1416,7 +1438,7 @@ function draw() {
   raft.x = lerp(raft.px, raft.x, A); raft.d = lerp(raft.pd, raft.d, A); raft.a = lerp(raft.pa, raft.a, A); camI = lerp(cam.pd, cam.d, A);
   for (const l of logs) { l.kx = l.x; l.kd = l.d; l.krot = l.rot; l.x = lerp(l.px, l.x, A); l.d = lerp(l.pd, l.d, A); l.rot = lerp(l.prot, l.rot, A); }
   camSpeed = fdt > 0 ? clamp((camI - lastCamI) / fdt, -200, 700) : 0; lastCamI = camI;
-  try { drawScene(); }
+  try { baseTransform(); ROT = LAND; drawScene(); drawOverlay(); }
   finally { raft.x = keep[0]; raft.d = keep[1]; raft.a = keep[2]; for (const l of logs) { l.x = l.kx; l.d = l.kd; l.rot = l.krot; } }
 }
 function drawScene() {
@@ -1626,8 +1648,9 @@ function drawScene() {
   for (const f of floaters) { ctx.globalAlpha = clamp(f.life * 2, 0, 1); inkText(f.text, f.x, Y(f.d), f.size * (1 + 0.45 * clamp((f.life - 0.86) / 0.14, 0, 1)), f.color, 'center', KAI, 700); }
   ctx.globalAlpha = 1;
   for (const [d, text] of SIGNS) {
-    const y = Y(d + 150); if (y < -30 || y > H + 30) continue;
-    ctx.globalAlpha = clamp(Math.min((H - y) / 120, (y - 70) / 110), 0, 1); paperTag(text, W / 2, y, 16); ctx.globalAlpha = 1;
+    const y = Y(d + 150), m = LAND ? 170 : 0; if (y < -30 || y > H + 30) continue;          // 横屏时纸签顺着河的方向展开，要更早开始淡出
+    ctx.globalAlpha = clamp(Math.min((H - y - m) / 120, (y - 70 - m) / 110), 0, 1);
+    paperTag(LAND && LAND_SIGN[text] || text, LAND ? riverCx(d + 150) + riverW(d + 150) + 46 : W / 2, y, 16); ctx.globalAlpha = 1;
   }
   ctx.restore();
 
@@ -1642,22 +1665,28 @@ function drawScene() {
     const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
     g.addColorStop(0, 'rgba(196,72,50,0)'); g.addColorStop(1, `rgba(196,72,50,${Math.min(0.6, flash * 2.6)})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  for (const c of confetti) {    // 通关时落下的花瓣
+}
+// 不随世界旋转的一层：通关的花瓣、界面、倒计时
+function drawOverlay() {
+  ctx.setTransform(PR, 0, 0, PR, 0, 0); ROT = false;
+  for (const c of confetti) {
     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot); ctx.fillStyle = c.c;
     oval(0, 0, c.s * 0.75, c.s * 0.36 * (0.35 + 0.65 * Math.abs(Math.cos(c.rot * 2)))); ctx.fill(); ctx.restore();
   }
   if (state !== 'menu') drawHUD();
   if (state === 'ready') {
     const n = Math.ceil(countdown / 0.7), fr = countdown / 0.7 - (n - 1);
-    ctx.globalAlpha = clamp(fr * 2.5, 0, 1); inkText(String(n), W / 2, H * 0.4, 96 + (1 - fr) * 44, INK, 'center', KAI, 700); ctx.globalAlpha = 1;
+    ctx.globalAlpha = clamp(fr * 2.5, 0, 1); inkText(String(n), SW / 2, SH * 0.4, 96 + (1 - fr) * 44, INK, 'center', KAI, 700); ctx.globalAlpha = 1;
   } else if (state === 'play' && raft.time < 0.8) {
-    ctx.globalAlpha = 1 - raft.time / 0.8; inkText('出发', W / 2, H * 0.4, 60 + raft.time * 30, INK, 'center', KAI, 700); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1 - raft.time / 0.8; inkText('出发', SW / 2, SH * 0.4, 60 + raft.time * 30, INK, 'center', KAI, 700); ctx.globalAlpha = 1;
   }
+  baseTransform();
 }
 let vignette = null;
 
 // ---- 界面：尽量少、尽量轻，像写在画边上的小字 ----
 const BTN = { pause: [28, 64], mute: [62, 64], r: 14 };
+const TB = { up: [74, 196], down: [74, 84], go: [72, 62], sprint: [170, 56] };      // 横屏触屏按钮：距离所在角（左下 / 右下）的偏移
 const TEAL = '#2f6f7a', OCHRE = '#a8741a', VERMILION = '#b8452f', MOSS = '#6f8f5a';
 function airCell(x, y, r, full, alpha = 1) {       // 一格气囊
   ctx.globalAlpha = alpha;
@@ -1673,7 +1702,7 @@ function airCell(x, y, r, full, alpha = 1) {       // 一格气囊
 function drawHUD() {
   const g = ctx.createLinearGradient(0, 0, 0, 104);
   g.addColorStop(0, paperA(0.82)); g.addColorStop(0.6, paperA(0.4)); g.addColorStop(1, paperA(0));
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 104);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, SW, 104);
   // 界面动效用真实帧时间推进
   if (hud.gain && (hud.gain.t += fdt * 3) > 1) hud.gain = null;
   hud.starBump = Math.max(0, hud.starBump - fdt * 5); hud.score += (raft.score - hud.score) * Math.min(1, fdt * 9);
@@ -1687,16 +1716,16 @@ function drawHUD() {
     if (f.kind === 'heart') {          // 失去的那格气囊：瘪下去、飘落
       airCell(25 + f.i * 25 + f.t * 8, 27 + f.t * f.t * 46, 9 * (1 - f.t * 0.5), true, 1 - f.t);
     } else {                             // 采到的莲花：飘向计数处
-      const e = f.t * f.t * (3 - 2 * f.t), fx = lerp(f.sx, W / 2 - 36, e) + Math.sin(e * Math.PI) * 26, fy = lerp(f.sy, 27, e), s = 44 * (1 - e * 0.42);
+      const e = f.t * f.t * (3 - 2 * f.t), [ax, ay] = toScreen(f.sx, f.sy), fx = lerp(ax, SW / 2 - 36, e) + Math.sin(e * Math.PI) * 26, fy = lerp(ay, 27, e), s = 44 * (1 - e * 0.42);
       ctx.save(); ctx.translate(fx, fy); ctx.rotate(e * 3); ctx.drawImage(LOTUS, -s / 2, -s / 2, s, s); ctx.restore();
     }
   }
   const ls = 27 * (1 + hud.starBump * 0.3);
-  ctx.drawImage(LOTUS, W / 2 - 36 - ls / 2, 27 - ls / 2, ls, ls);
-  inkText(`${raft.coins}/${coins.length}`, W / 2 - 17, 28, 18 + hud.starBump * 3, INK, 'left');
-  if (raft.combo >= 3) inkText(`连击 ×${raft.combo}`, W / 2, 53, 13 + Math.min(raft.combo, 20) * 0.15, OCHRE, 'center', KAI);
-  inkText(raft.time.toFixed(1) + ' 秒', W - 16, 28, 17, INK, 'right');
-  inkText(String(Math.round(hud.score)), W - 34, 52, 13 + Math.min(4, Math.abs(raft.score - hud.score) * 0.02), TEAL, 'right');
+  ctx.drawImage(LOTUS, SW / 2 - 36 - ls / 2, 27 - ls / 2, ls, ls);
+  inkText(`${raft.coins}/${coins.length}`, SW / 2 - 17, 28, 18 + hud.starBump * 3, INK, 'left');
+  if (raft.combo >= 3) inkText(`连击 ×${raft.combo}`, SW / 2, 53, 13 + Math.min(raft.combo, 20) * 0.15, OCHRE, 'center', KAI);
+  inkText(raft.time.toFixed(1) + ' 秒', SW - 16, 28, 17, INK, 'right');
+  inkText(String(Math.round(hud.score)), SW - 34, 52, 13 + Math.min(4, Math.abs(raft.score - hud.score) * 0.02), TEAL, 'right');
   for (const key of ['pause', 'mute']) {       // 暂停 / 声音：两枚小纸钮
     const [bx, by] = BTN[key];
     ctx.fillStyle = paperA(0.88); circle(bx, by, BTN.r); ctx.fill(); ctx.strokeStyle = ink(0.5); ctx.lineWidth = 1.1; ctx.stroke();
@@ -1716,31 +1745,38 @@ function drawHUD() {
     ctx.fillStyle = c; ctx.globalAlpha = raft.tired ? 0.6 + 0.4 * Math.sin(T * 9) : 1; ctx.beginPath(); ctx.roundRect(x0 + 1.2, y0 + 1.2, Math.max(4.6, (w - 2.4) * raft.stam), 4.6, 2.3); ctx.fill(); ctx.globalAlpha = 1;
     inkText(raft.sprint ? '冲刺' : raft.tired ? '喘口气…' : '体力', x0 + w + 6, y0 + 4, 11, c, 'left');
   }
-  // 行程：一条细线，上面一只小艇
-  const bx = W - 16, by0 = 96, by1 = H - 150, p = clamp(raft.d / END, 0, 1), py = by1 - (by1 - by0) * p;
-  ctx.lineCap = 'round'; ctx.strokeStyle = paperA(0.8); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
-  ctx.strokeStyle = ink(0.4); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(bx, by0); ctx.lineTo(bx, by1); ctx.stroke();
-  ctx.strokeStyle = TEAL; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(bx, by1); ctx.lineTo(bx, py); ctx.stroke();
-  ctx.fillStyle = '#e46f51'; oval(bx, py, 5, 8); ctx.fill(); ctx.strokeStyle = ink(0.7); ctx.lineWidth = 1; ctx.stroke();
-  inkText('终', bx, by0 - 14, 12, INK, 'center', KAI);
-  if (state === 'play' && raft.hole > 0.15) inkText('回流！全力划出去', W / 2, 86, 17 + Math.sin(T * 14) * 1.2, VERMILION, 'center', KAI, 700);
-  else if (boostAt(raft.d) > 0.5 && state === 'play') inkText('急　流', W / 2, 86, 17, TEAL, 'center', KAI, 700);
-  if (toast && toast.t > 0) { ctx.globalAlpha = Math.min(1, toast.t); paperTag(toast.text, W / 2, 116, 12); ctx.globalAlpha = 1; }
+  // 行程：一条细线，上面一只小艇。横屏时横在画面下方，和河流同一个方向
+  const p = clamp(raft.d / END, 0, 1), track = (x0, y0, x1, y1) => {
+    const px = lerp(x0, x1, p), py = lerp(y0, y1, p);
+    ctx.lineCap = 'round'; ctx.strokeStyle = paperA(0.8); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.strokeStyle = ink(0.4); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.strokeStyle = TEAL; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(px, py); ctx.stroke();
+    ctx.fillStyle = '#e46f51'; oval(px, py, x0 === x1 ? 5 : 8, x0 === x1 ? 8 : 5); ctx.fill(); ctx.strokeStyle = ink(0.7); ctx.lineWidth = 1; ctx.stroke();
+  };
+  if (LAND) { track(SW * 0.32, SH - 16, SW * 0.68, SH - 16); inkText('终', SW * 0.68 + 15, SH - 16, 12, INK, 'center', KAI); }
+  else { track(SW - 16, SH - 150, SW - 16, 96); inkText('终', SW - 16, 82, 12, INK, 'center', KAI); }
+  if (state === 'play' && raft.hole > 0.15) inkText('回流！全力划出去', SW / 2, 86, 17 + Math.sin(T * 14) * 1.2, VERMILION, 'center', KAI, 700);
+  else if (boostAt(raft.d) > 0.5 && state === 'play') inkText('急　流', SW / 2, 86, 17, TEAL, 'center', KAI, 700);
+  if (toast && toast.t > 0) { ctx.globalAlpha = Math.min(1, toast.t); paperTag(toast.text, SW / 2, 116, 12); ctx.globalAlpha = 1; }
   // 触屏按钮：三枚淡淡的纸钮
   if (isTouch && (state === 'play' || state === 'ready')) {
-    const sx = W / 2, sy = H - 66, ease = Math.min(1, fdt * 18);              // 按下、松开都有一小段过渡
-    hud.L += ((input.L ? 1 : 0) - hud.L) * ease; hud.R += ((input.R ? 1 : 0) - hud.R) * ease; hud.S += ((input.S && !raft.tired ? 1 : 0) - hud.S) * ease;
-    ctx.fillStyle = paperA(0.3 + 0.4 * hud.S); circle(sx, sy, 36 + hud.S * 3); ctx.fill(); ctx.strokeStyle = ink(0.3); ctx.lineWidth = 1; ctx.stroke();
-    ctx.strokeStyle = raft.tired ? VERMILION : MOSS; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(sx, sy, 36 + hud.S * 3, -Math.PI / 2, -Math.PI / 2 + TAU * raft.stam); ctx.stroke();
-    ctx.strokeStyle = ink(0.75); ctx.lineWidth = 3; ctx.lineJoin = 'round';
-    for (const oy of [-9, 3]) { ctx.beginPath(); ctx.moveTo(sx - 12, sy + oy + 8); ctx.lineTo(sx, sy + oy - 4); ctx.lineTo(sx + 12, sy + oy + 8); ctx.stroke(); }
-    for (const [s, on] of [[-1, hud.L], [1, hud.R]]) {
-      const x = W / 2 + s * (W / 2 - 62), y = H - 70;
-      ctx.fillStyle = paperA(0.3 + 0.4 * on); circle(x, y, 42 + on * 3); ctx.fill(); ctx.strokeStyle = ink(0.3); ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = ink(0.75); ctx.beginPath(); ctx.moveTo(x + s * 17, y); ctx.lineTo(x - s * 9, y - 16); ctx.lineTo(x - s * 9, y + 16); ctx.closePath(); ctx.fill();
+    const ease = Math.min(1, fdt * 18);              // 按下、松开都有一小段过渡
+    hud.L += ((input.L ? 1 : 0) - hud.L) * ease; hud.R += ((input.R ? 1 : 0) - hud.R) * ease; hud.S += ((input.S && !raft.tired ? 1 : 0) - hud.S) * ease; hud.U += ((input.U ? 1 : 0) - hud.U) * ease;
+    const pad = (x, y, r, on) => { ctx.fillStyle = paperA(0.3 + 0.4 * on); circle(x, y, r + on * 3); ctx.fill(); ctx.strokeStyle = ink(0.3); ctx.lineWidth = 1; ctx.stroke(); };
+    const tri = (x, y, dx, dy) => { ctx.fillStyle = ink(0.75); ctx.beginPath(); ctx.moveTo(x + dx * 17, y + dy * 17); ctx.lineTo(x - dx * 9 - dy * 16, y - dy * 9 - dx * 16); ctx.lineTo(x - dx * 9 + dy * 16, y - dy * 9 + dx * 16); ctx.closePath(); ctx.fill(); };
+    const chev = (x, y, dx, dy) => { ctx.strokeStyle = ink(0.75); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const o of [-6, 6]) { ctx.beginPath(); ctx.moveTo(x + dx * o - dx * 6 - dy * 12, y + dy * o - dy * 6 - dx * 12); ctx.lineTo(x + dx * o + dx * 6, y + dy * o + dy * 6); ctx.lineTo(x + dx * o - dx * 6 + dy * 12, y + dy * o - dy * 6 + dx * 12); ctx.stroke(); } };
+    const ring = (x, y, r) => { ctx.strokeStyle = raft.tired ? VERMILION : MOSS; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + TAU * raft.stam); ctx.stroke(); };
+    if (LAND) {              // 横屏：左手拇指管上下转向，右手拇指管前进和冲刺，都落在岸上不挡水面
+      pad(TB.up[0], SH - TB.up[1], 42, hud.L); tri(TB.up[0], SH - TB.up[1], 0, -1); pad(TB.down[0], SH - TB.down[1], 42, hud.R); tri(TB.down[0], SH - TB.down[1], 0, 1);
+      pad(SW - TB.go[0], SH - TB.go[1], 42, hud.U); tri(SW - TB.go[0], SH - TB.go[1], 1, 0);
+      pad(SW - TB.sprint[0], SH - TB.sprint[1], 34, hud.S); ring(SW - TB.sprint[0], SH - TB.sprint[1], 34 + hud.S * 3); chev(SW - TB.sprint[0], SH - TB.sprint[1], 1, 0);
+    } else {
+      pad(SW / 2, SH - 66, 36, hud.S); ring(SW / 2, SH - 66, 36 + hud.S * 3); chev(SW / 2, SH - 66, 0, -1);
+      for (const [s, on] of [[-1, hud.L], [1, hud.R]]) { const x = SW / 2 + s * (SW / 2 - 62); pad(x, SH - 70, 42, on); tri(x, SH - 70, s, 0); }
     }
   }
+
 }
 
 // ---------- 界面 ----------
@@ -1757,6 +1793,11 @@ const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ',');
 
 // 通关上一关才解锁下一关
 const unlocked = i => i <= 0 || !!store.get(bestKey(LEVELS[i - 1]), null);
+// 操作说明：竖屏和横屏各一套
+function helpHtml() {
+  if (isTouch) return LAND ? '左手<b>上 / 下</b>两键转向<br>右下角两键：单箭头前进，双箭头冲刺' : '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺';
+  return (LAND ? '<kbd>↑</kbd> <kbd>↓</kbd> 转向　<kbd>→</kbd> 前进　<kbd>←</kbd> 倒划' : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划') + '<br><kbd>空格</kbd> 冲刺';
+}
 function showMenu() {
   state = 'menu';
   const cards = LEVELS.map((lv, i) => {
@@ -1765,9 +1806,8 @@ function showMenu() {
     return `<div class="lv${lv === LV ? ' sel' : ''}" data-lv="${i}" style="--c:${THEMES[lv.theme].accent}"><b>${lvTitle(lv)}</b><span>${b ? `${lotusRow(b.stars)} · ${fmt(b.score || 0)} 分 · ${b.time.toFixed(1)} 秒` : lv.intro}</span></div>`;
   }).join('');
   const total = LEVELS.reduce((n, lv) => n + ((store.get(bestKey(lv), null) || {}).stars || 0), 0);
-  show(`<h1>橡皮艇漂流</h1><h2>选择关卡 <img class="lt" src="${LOTUS_URL}" alt=""> ${total}/${LEVELS.length * 3}</h2>${cards}
-    <p class="small">${isTouch ? '按住屏幕<b>左侧 / 右侧</b>转向　两侧同时按住前进<br><b>中间按钮</b>冲刺'
-      : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划<br><kbd>空格</kbd> 冲刺　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
+  show(`<h1>橡皮艇漂流</h1><h2>选择关卡 <img class="lt" src="${LOTUS_URL}" alt=""> ${total}/${LEVELS.length * 3}</h2><div class="lvs">${cards}</div>
+    <p class="small">${helpHtml()}${isTouch ? '' : '　<kbd>P</kbd> 暂停　<kbd>M</kbd> 静音　<kbd>R</kbd> 重开'}</p>
     <p class="small">橡皮艇只经得起 3 次碰撞。</p>`, [['出发', () => start()], ['设置', () => showSettings(showMenu)]]);
   panel.querySelectorAll('.lv[data-lv]').forEach(el => { el.onclick = e => { e.stopPropagation(); pickLevel(+el.dataset.lv); }; });
 }
@@ -1789,6 +1829,7 @@ function showSettings(back) {
     ${row('音量', seg('vol', [['静音', 0], ['低', 0.35], ['中', 0.7], ['高', 1]], muted ? 0 : cfg.vol))}
     ${row('转向灵敏度', seg('sens', [['低', 0], ['中', 1], ['高', 2]], cfg.sens))}
     ${row('画质', seg('quality', [['流畅', 0], ['精细', 1]], cfg.quality))}
+    ${row('画面方向', seg('orient', [['自动', 'auto'], ['竖', 'port'], ['横', 'land']], cfg.orient))}
     ${row('背景音乐', seg('music', [['关', 0], ['开', 1]], cfg.music ? 1 : 0))}
     ${row('撞击震动', seg('shake', [['关', 0], ['开', 1]], cfg.shake ? 1 : 0))}
     ${document.fullscreenEnabled ? row('全屏', seg('fs', [['关', 0], ['开', 1]], document.fullscreenElement ? 1 : 0)) : ''}
@@ -1797,6 +1838,7 @@ function showSettings(back) {
     <p class="small" style="opacity:.6">橡皮艇漂流 v${VERSION}</p>`, [['返回', back]]);
   panel.querySelectorAll('.opt[data-k]').forEach(b => { b.onclick = e => {
     e.stopPropagation(); audio(); const k = b.dataset.k, v = +b.dataset.v;
+    if (k === 'orient') { cfg.orient = b.dataset.v; saveCfg(); resize(); showSettings(back); return; }
     if (k === 'vol') { if (v > 0) cfg.vol = v; setMuted(v === 0); if (v > 0) beep(880, 0.12, 'triangle', 0.1); }
     else if (k === 'shake') cfg.shake = !!v;
     else if (k === 'music') cfg.music = !!v;
@@ -1853,8 +1895,7 @@ function showDead() {
     <p>${isTouch ? tip.replace('按 ↓ 或松手', '松手') : tip}</p>`, [['再试一次', () => start()], ['选关', toMenu]]);
 }
 function showPause() {
-  show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p><p class="small">${isTouch ? '按住左侧 / 右侧转向　两侧同时按住前进<br>中间按钮冲刺'
-    : '<kbd>←</kbd> <kbd>→</kbd> 转向　<kbd>↑</kbd> 前进　<kbd>↓</kbd> 倒划　<kbd>空格</kbd> 冲刺<br>按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始'}</p>`,
+  show(`<h1>暂停</h1><p>休息一下，河水不会跑。</p><p class="small">${helpHtml()}${isTouch ? '' : '<br>按 <kbd>P</kbd> 继续　<kbd>R</kbd> 重新开始'}</p>`,
     [['继续', togglePause], ['重新开始', () => start()], ['设置', () => showSettings(showPause)], ['选关', toMenu]]);
 }
 function togglePause() {
@@ -1864,13 +1905,16 @@ function togglePause() {
 
 // ---------- 输入 ----------
 const KEYS = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', ArrowUp: 'U', w: 'U', W: 'U', ArrowDown: 'B', s: 'B', S: 'B', Shift: 'S' };
+// 横屏时方向键跟着转：↑ ↓ 是转向，→ 前进，← 倒划
+const LAND_KEY = { L: 'B', R: 'U', U: 'L', B: 'R', S: 'S' };
+const keyAct = key => { const k = KEYS[key]; return k && LAND ? LAND_KEY[k] : k; };
 const pointers = new Map();
 window.addEventListener('keydown', e => {
   if (state === 'menu' && panel.querySelector('.lv')) {          // 选关界面：↑ ↓ 或数字键换关
     const cur = LEVELS.indexOf(LV), to = e.key === 'ArrowDown' ? cur + 1 : e.key === 'ArrowUp' ? cur - 1 : /^[1-9]$/.test(e.key) ? +e.key - 1 : -1;
     if (to >= 0) { e.preventDefault(); pickLevel(to); return; }
   }
-  if (KEYS[e.key]) { input[KEYS[e.key]] = true; e.preventDefault(); return; }
+  if (keyAct(e.key)) { input[keyAct(e.key)] = true; e.preventDefault(); return; }
   if (e.repeat) return;
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
   else if (e.key === 'm' || e.key === 'M') setMuted(!muted);
@@ -1882,7 +1926,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
   }
 });
-window.addEventListener('keyup', e => { if (KEYS[e.key]) input[KEYS[e.key]] = false; if (e.key === ' ') input.S = false; });
+window.addEventListener('keyup', e => { if (keyAct(e.key)) input[keyAct(e.key)] = false; if (e.key === ' ') input.S = false; });
 function autoPause() { input.L = input.R = input.U = input.B = input.S = false; pointers.clear(); if (state === 'play') togglePause(); }
 window.addEventListener('blur', autoPause);
 document.addEventListener('visibilitychange', () => {       // 切到后台：暂停并彻底静音
@@ -1890,14 +1934,24 @@ document.addEventListener('visibilitychange', () => {       // 切到后台：�
   else if (ac && ac.state === 'suspended') ac.resume();
 });
 const rotateMq = window.matchMedia ? matchMedia('(orientation: landscape) and (max-height: 480px) and (pointer: coarse)') : null;
-window.addEventListener('resize', () => { if (rotateMq && rotateMq.matches) autoPause(); });
+window.addEventListener('resize', () => {
+  input.L = input.R = input.U = input.B = input.S = false; pointers.clear();          // 方向可能变了，按键含义也变了
+  if (cfg.orient === 'port' && rotateMq && rotateMq.matches) autoPause();
+});
 
 function syncPointers() {
-  let L = false, R = false, S = false;
-  for (const side of pointers.values()) { if (side < 0) L = true; else if (side > 0) R = true; else S = true; }
-  input.L = L; input.R = R; input.S = S;
+  let L = false, R = false, S = false, U = false;
+  for (const z of pointers.values()) { if (z === -1) L = true; else if (z === 1) R = true; else if (z === 2) U = true; else S = true; }
+  input.L = L; input.R = R; input.S = S; if (LAND) input.U = U;
 }
-function logical(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+function logical(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * SW, (e.clientY - r.top) / r.height * SH]; }
+// 按下的位置对应哪个动作：-1 左舷划（转向屏幕左 / 上），1 右舷划，0 冲刺，2 前进
+function zoneOf(x, y) {
+  if (!LAND) return isTouch && Math.hypot(x - SW / 2, y - (SH - 66)) < 44 ? 0 : x < SW / 2 ? -1 : 1;
+  if (x > SW * 0.7 && y > SH - 132) return x < SW - 122 ? 0 : 2;          // 右下角：靠里是冲刺，靠边是前进
+  if (x < SW * 0.3) return y < SH - 140 ? -1 : 1;
+  return y < SH / 2 ? -1 : 1;                 // 中间区域：点艇的上方就往上，下方就往下
+}
 canvas.addEventListener('pointerdown', e => {
   audio();
   const [x, y] = logical(e);
@@ -1905,10 +1959,9 @@ canvas.addEventListener('pointerdown', e => {
     if (Math.hypot(x - BTN.pause[0], y - BTN.pause[1]) < BTN.r + 6) { togglePause(); return; }
     if (Math.hypot(x - BTN.mute[0], y - BTN.mute[1]) < BTN.r + 6) { setMuted(!muted); return; }
   }
-  const onSprint = isTouch && Math.hypot(x - W / 2, y - (H - 66)) < 44;
-  pointers.set(e.pointerId, onSprint ? 0 : x < W / 2 ? -1 : 1); syncPointers(); e.preventDefault();
+  pointers.set(e.pointerId, zoneOf(x, y)); syncPointers(); e.preventDefault();
 });
-canvas.addEventListener('pointermove', e => { if (pointers.get(e.pointerId)) { pointers.set(e.pointerId, logical(e)[0] < W / 2 ? -1 : 1); syncPointers(); } });
+canvas.addEventListener('pointermove', e => { if (pointers.get(e.pointerId)) { const [x, y] = logical(e); pointers.set(e.pointerId, zoneOf(x, y) || pointers.get(e.pointerId)); syncPointers(); } });
 for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, e => { if (pointers.delete(e.pointerId)) syncPointers(); });
 document.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -1922,7 +1975,7 @@ function frame(now) {
   try { tick(now); frameErrors = 0; }
   catch (e) {
     if (frameErrors++ === 0) console.error(e);
-    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    baseTransform();
     if (frameErrors > 40) {        // 连续出错：停下来，给玩家一个能恢复的出口
       halted = true; state = 'menu';
       show('<h1>出了点问题</h1><p>游戏遇到了意外错误。<br>你的进度已经保存，刷新页面即可继续。</p>', [['刷新页面', () => location.reload()]]);
@@ -1966,7 +2019,7 @@ requestAnimationFrame(frame);
 // 供自动化验收使用
 window.__raft = {
   get state() { return state; }, get raft() { return raft; }, get result() { return result; },
-  get level() { return { rocks, logs, coins, rings, ducks, whirls, drops, END, id: LV.id }; }, get cfg() { return cfg; },
+  get level() { return { rocks, logs, coins, rings, ducks, whirls, drops, END, id: LV.id }; }, get cfg() { return cfg; }, get view() { return { land: LAND, sw: SW, sh: SH, len: H, pr: PR }; },
   input, safeX, riverCx, riverW, start, draw,
   setManual(v) { manual = v; }, step() { update(DT); },
 };

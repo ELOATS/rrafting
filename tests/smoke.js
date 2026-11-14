@@ -149,6 +149,22 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
   await page.tap('button.alt'); check('小屏手机设置面板不溢出', await fit());
   await page.context().close();
 
+  console.log('横屏');
+  page = await newPage({ viewport: { width: 1280, height: 800 } });
+  check('宽屏自动用横向布局', await page.evaluate(() => window.__raft.view.land === true));
+  const fill = await page.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return r.width * r.height / (innerWidth * innerHeight); });
+  check('横向布局铺满宽屏', fill > 0.85, `画面占屏 ${Math.round(fill * 100)}%`);
+  const lr = await page.evaluate(() => { const g = window.__raft; g.setManual(true); g.start(true, 0); let n = 0; while (g.state === 'play' && n++ < 40000) { window.botKeys(60, 30, 130); g.step(); if (n % 40 === 0) g.draw(); } g.setManual(false); return g.state; });
+  check('横向布局下完整打完一关且绘制无报错', lr === 'win' && page.errors.length === 0, page.errors.slice(0, 2).join(' | '));
+  await page.evaluate(() => { const g = window.__raft; Object.keys(g.input).forEach(k => g.input[k] = false); g.start(true, 0); });
+  const keyMap = {};
+  for (const k of ['ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft']) { await page.keyboard.down(k); keyMap[k] = await page.evaluate(() => { const I = window.__raft.input; return Object.keys(I).filter(x => I[x]).join(''); }); await page.keyboard.up(k); }
+  check('横向时方向键跟着转（↑↓ 转向，→ 前进，← 倒划）', keyMap.ArrowUp === 'L' && keyMap.ArrowDown === 'R' && keyMap.ArrowRight === 'U' && keyMap.ArrowLeft === 'B', JSON.stringify(keyMap));
+  await page.context().close();
+  page = await newPage({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+  check('手机横握：不再提示竖屏，面板不溢出', await page.evaluate(() => getComputedStyle(document.getElementById('rotate')).display === 'none') && await page.evaluate(() => { const p = document.getElementById('panel').getBoundingClientRect(), w = document.getElementById('wrap').getBoundingClientRect(); return p.top >= w.top - 1 && p.bottom <= w.bottom + 1; }));
+  await page.context().close();
+
   console.log('离线');
   page = await newPage();
   const sw = await page.evaluate(() => navigator.serviceWorker.ready.then(() => true).catch(() => false));
